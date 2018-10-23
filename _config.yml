@@ -1,10 +1,10 @@
 # Site settings
-title: BY Blog
-SEOTitle: Lv_Dobby | BY Blog
+title: LvDobby Blog
+SEOTitle: Lv_Dobby |  Blog
 header-img: img/post-bg-desk.jpg
 email: 18698215567@163.com
 description: "Every failure is leading towards success."
-keyword: "BY, BY Blog, 吕峥的博客, qiubaiying, 吕峥, Java, Hadoop"
+keyword: "LvDobby, LvDobby Blog, 吕峥的博客, qiubaiying, 吕峥, Java, Hadoop"
 url: "http://lvdobby.github.io"          # your host, for absolute URL
 baseurl: ""      # for example, '/blog' if your blog hosted on 'host/blog'
 github_repo: "https://github.com/LvDobby/LvDobby.github.io.git" # you code repository
@@ -12,7 +12,7 @@ github_repo: "https://github.com/LvDobby/LvDobby.github.io.git" # you code repos
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
 sidebar-about-description: "Goals determine what you going to be!"
-sidebar-avatar: /img/about-BY-gentle.jpg      # use absolute URL, seeing it's used in both `/` and `/about/`
+sidebar-avatar: /img/about-Lz-gentle.jpg      # use absolute URL, seeing it's used in both `/` and `/about/`
 
 
 
