@@ -4,7 +4,7 @@ title:      浅析ThreadLocal
 subtitle:   浅析ThreadLocal
 date:       2018-11-12
 author:     lvDobby
-header-img: img/post-bg-re-vs-ng2.jpg
+header-img: img/post-bg-rwd.jpg
 catalog:    true
 tags:
     - java
