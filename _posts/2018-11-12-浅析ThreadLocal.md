@@ -40,10 +40,10 @@ Entry为ThreadLocalMap的内部类，其中包含真正的"map"：key为当前�
 ![](https://raw.githubusercontent.com/LvDobby/LvDobby.github.io/master/img/ThreadLocal/createmap.png)
 
 ![](https://raw.githubusercontent.com/LvDobby/LvDobby.github.io/master/img/ThreadLocal/threadloaclmap.png)
-```
+
 注：和HashMap的最大的不同在于，ThreadLocalMap结构非常简单，没有next引用，也就是说ThreadLocalMap中解决Hash冲突的方式并非链表的方式，而是采用线性探测的方式，所谓线性探测，就是根据初始key的hashcode值确定元素在table数组中的位置，如果发现这个位置上已经有其他key值的元素被占用，则利用固定的算法寻找一定步长的下个位置，依次判断，直至找到能够存放的位置。
 ThreadLocalMap解决Hash冲突的方式就是简单的步长加1或减1，寻找下一个相邻的位置。
-```
+
 #### set()
 用于保存当前线程的副本变量值,先获取当前线程对象，并判断ThreadLocalMap中是否含有以此线程为key的map，有则覆盖，无则创建。源码如下：
 
@@ -55,9 +55,9 @@ ThreadLocalMap解决Hash冲突的方式就是简单的步长加1或减1，寻找
 ![](https://raw.githubusercontent.com/LvDobby/LvDobby.github.io/master/img/ThreadLocal/get.png)
 
 ![](https://raw.githubusercontent.com/LvDobby/LvDobby.github.io/master/img/ThreadLocal/setinitalvalue.png)
-```
+
 注：上面的 initialValue()方法为protected，如果希望线程局部变量具有非null的初始值，则必须对ThreadLocal进行子类化，并重写此方法。
-```
+
 #### remove()
 移除当前前程的副本变量值。拿到当前线程的threadLocals属性，如果不为空，则将key为当前ThreadLocal的键值对移除，并且会调用expungeStaleEntry方法清除key为空的Entry。源码如下：
 ![](https://raw.githubusercontent.com/LvDobby/LvDobby.github.io/master/img/ThreadLocal/remove.png)
