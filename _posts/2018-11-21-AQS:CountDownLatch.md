@@ -24,7 +24,7 @@ Node就是等待队列里的一个节点，具体结构如下：
 
 同步队列的基本结构：
 
-AbstractQueuedSynchronizer类中其它方法主要是用于插入节点、释放节点，插入节点过程如下图所示：
+AbstractQueuedSynchronizer类中其它方法主要是用于插入节点、释放节点，插入节点：
 
 #### AQS源码解析
 ```
@@ -84,14 +84,14 @@ static  final class Node {
 
 #### AQS小结
 AbstractQueuedSynchronizer实现了对资源获取与释放的基础实现，真正使用到的地方还在是各个具体的功能类中
-如CountDownLatch、ReentrantLock等，后面在这些类中会具体分析。
+如CountDownLatch、ReentrantLock等。
 
 
 ### CountDownLatch is what
 CountDownLatch允许一个或者多个线程一直等待，直到一组其它操作执行完成。在使用CountDownLatch时，需要指定一个整数值，此值是线程将要等待的操作数。
 当某个线程为了要执行这些操作而等待时，需要调用await方法。await方法让线程进入休眠状态直到所有等待的操作完成为止。
 当等待的某个操作执行完成，它使用countDown方法来减少CountDownLatch类的内部计数器。
-当内部计数器递减为0时，CountDownLatch会唤醒所有调用await方法而休眠的线程们。
+当内部计数器递减为0时，CountDownLatch会唤醒所有调用await方法而休眠的线程。
 
 ## CountDownLatch Demo
 ```
