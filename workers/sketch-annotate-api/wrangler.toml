@@ -9,10 +9,10 @@ compatibility_date = "2024-11-01"
 ALLOWED_ORIGINS = "https://lvdobby.github.io,http://127.0.0.1:4000,http://localhost:4000"
 # 图像后端：openrouter（默认）| replicate
 IMAGE_PROVIDER = "openrouter"
-# OpenRouter：视觉分析（识图 + 情境文案，配合客户端 Canvas 描边）
-OPENROUTER_ANALYZE_MODEL = "google/gemini-2.5-flash"
-# OpenRouter：图生图（/api/annotate 旧路径，不推荐）
+# OpenRouter：图生图 / 图像编辑（客户端默认路径 /api/annotate）
 OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
+# OpenRouter：视觉分析（可选 /api/analyze，识图 + 文案）
+OPENROUTER_ANALYZE_MODEL = "google/gemini-2.5-flash"
 # Recraft 专用：越低越贴近原图（仅当 OPENROUTER_MODEL 为 recraft/* 时生效）
 OPENROUTER_IMAGE_STRENGTH = "0.18"
 # 可选 Replicate 回退

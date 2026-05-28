@@ -6,11 +6,11 @@
   'use strict';
 
   var SKETCH_PROMPT =
-    '基于用户上传的原始照片，为图片添加手绘风格注释与装饰。' +
-    '统一白色细线条、一笔画松弛风格、沿物体边缘轻描轮廓；' +
-    '适量箭头虚线；中文手写字体、口语化碎碎念；' +
-    '饮品写味道温度感受，食物写口感，环境写氛围，收尾一句总结感悟；' +
-    '少量热气星星爱心表情；整体松弛自然不精致。';
+    '在原图基础上为每个元素添加有意义的手绘注释。' +
+    '白色细线手绘笔、一笔画松弛风格、沿物体边缘描轮廓；适量箭头虚线；' +
+    '中文手写口语短句、碎碎念小情绪；' +
+    '饮品写味道温度，食物写口感，环境写氛围，整体一句总结；' +
+    '少量热气星星爱心表情；小红书随手记录、松弛自然。';
 
   var COPY = {
     drink: ['冰冰的，好清爽', '一口下去，有点醒神', '温温的，挺治愈', '甜度刚好，不腻'],
@@ -436,70 +436,6 @@
     });
   }
 
-  function clamp01(value, fallback) {
-    var n = Number(value);
-    if (!isFinite(n)) return fallback;
-    return Math.min(0.92, Math.max(0.05, n));
-  }
-
-  function normalizeCloudAnalysis(data) {
-    if (!data || !Array.isArray(data.labels)) return defaultAnalysis();
-    var labels = data.labels
-      .map(function (lb) {
-        return {
-          text: String(lb.text || '').trim().slice(0, 48),
-          x: clamp01(lb.x, 0.1),
-          y: clamp01(lb.y, 0.5),
-          type: lb.type || 'other',
-        };
-      })
-      .filter(function (lb) {
-        return lb.text.length >= 2;
-      });
-    if (labels.length < 2) return defaultAnalysis();
-    return {
-      elements: Array.isArray(data.elements) && data.elements.length ? data.elements.slice(0, 8) : ['生活场景'],
-      labels: labels.slice(0, 6),
-    };
-  }
-
-  function generateWithCloudHybrid(file) {
-    var apiBase = getApiBase();
-    if (!apiBase) {
-      return Promise.reject(new Error('未配置 Worker API 地址，请在高级设置或 _config.yml 中填写 sketch_api_url'));
-    }
-    var headers = getAuthHeaders();
-    var form = new FormData();
-    form.append('image', file);
-
-    setStatus('云端识图中，分析场景与文案…', true);
-    return fetch(apiBase + '/api/analyze', {
-      method: 'POST',
-      headers: headers,
-      body: form,
-    })
-      .then(function (res) {
-        return res.json().then(function (data) {
-          if (!res.ok) throw new Error(data.error || '识图失败');
-          return data;
-        });
-      })
-      .then(function (data) {
-        if (!data.analysis) throw new Error(data.error || '识图结果无效');
-        var analysis = normalizeCloudAnalysis(data.analysis);
-        setStatus('识图完成，正在沿边缘精绘描线…', true);
-        return loadImageFromFile(file).then(function (img) {
-          var result = renderAnnotated(img, analysis);
-          return {
-            generatedUrl: result.dataUrl,
-            elements: analysis.elements,
-            analysis: analysis,
-            modeLabel: '云端识图 + 本地精绘（沿边缘描线 + 情境文案）',
-          };
-        });
-      });
-  }
-
   function generateWithCloudProxy(file) {
     var apiBase = getApiBase();
     if (!apiBase) {
@@ -586,11 +522,11 @@
 
     var pipeline = useCloud
       ? originalDataUrlPromise.then(function (originalDataUrl) {
-          return generateWithCloudHybrid(currentFile).then(function (payload) {
+          return generateWithCloudProxy(currentFile).then(function (payload) {
             return {
               originalUrl: originalDataUrl,
               generatedUrl: payload.generatedUrl,
-              analysis: payload.analysis || { elements: payload.elements },
+              analysis: { elements: payload.elements },
               modeLabel: payload.modeLabel,
             };
           });

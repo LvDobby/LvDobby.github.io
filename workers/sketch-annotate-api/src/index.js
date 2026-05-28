@@ -32,7 +32,7 @@ export default {
           provider: getProvider(env),
           model: getModelLabel(env),
           analyzeModel: getAnalyzeModelLabel(env),
-          mode: getProvider(env) === 'openrouter' ? 'hybrid' : getProvider(env),
+          mode: getProvider(env) === 'openrouter' ? 'image-gen' : getProvider(env),
           async: !!env.SKETCH_JOBS,
         };
         if (url.searchParams.get('verify') === '1' && getProvider(env) === 'openrouter') {
