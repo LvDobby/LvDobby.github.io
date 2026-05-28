@@ -41,7 +41,7 @@ export default {
           fallbackModel: env.OPENROUTER_FALLBACK_MODEL || null,
           analyzeModel: getAnalyzeModelLabel(env),
           mode: getProvider(env) === 'openrouter' ? 'image-gen' : getProvider(env),
-          async: !!env.SKETCH_JOBS,
+          async: getProvider(env) === 'replicate',
         };
         if (url.searchParams.get('verify') === '1' && getProvider(env) === 'openrouter') {
           body.openrouterKey = await verifyOpenRouterKey(env);
@@ -196,28 +196,12 @@ function resolveAnnotateModel(raw, env) {
   return getModelLabel(env);
 }
 
-async function handleAnnotateOpenRouter(env, ctx, dataUri, cors, model) {
-  if (env.SKETCH_JOBS) {
-    const jobId = crypto.randomUUID();
-    await env.SKETCH_JOBS.put(
-      jobId,
-      JSON.stringify({ status: 'processing', provider: 'openrouter', model }),
-      { expirationTtl: JOB_TTL },
-    );
-    ctx.waitUntil(runOpenRouterJob(jobId, dataUri, env, model));
-    return json(
-      {
-        jobId,
-        status: 'processing',
-        provider: 'openrouter',
-        model,
-        message: 'Poll GET /api/status?id=' + jobId,
-      },
-      200,
-      cors,
-    );
-  }
-
+/**
+ * OpenRouter 改图：在 POST 请求内同步等待完成。
+ * 不可使用 ctx.waitUntil + KV 异步：客户端收到 jobId 后会断开连接，
+ * waitUntil 仅延长约 30s，长时生成会被中断并一直停在 processing。
+ */
+async function handleAnnotateOpenRouter(env, _ctx, dataUri, cors, model) {
   try {
     const imageDataUrl = await generateWithOpenRouter(env, dataUri, model);
     return json(
@@ -232,34 +216,6 @@ async function handleAnnotateOpenRouter(env, ctx, dataUri, cors, model) {
     );
   } catch (err) {
     return providerErrorResponse(err, 'openrouter', cors);
-  }
-}
-
-async function runOpenRouterJob(jobId, dataUri, env, model) {
-  try {
-    const imageDataUrl = await generateWithOpenRouter(env, dataUri, model);
-    await env.SKETCH_JOBS.put(
-      jobId,
-      JSON.stringify({
-        status: 'succeeded',
-        provider: 'openrouter',
-        model,
-        imageDataUrl,
-      }),
-      { expirationTtl: JOB_TTL },
-    );
-  } catch (err) {
-    await env.SKETCH_JOBS.put(
-      jobId,
-      JSON.stringify({
-        status: 'failed',
-        provider: 'openrouter',
-        model,
-        error: humanizeOpenRouterError(err.message),
-        code: err.code || 'UPSTREAM_ERROR',
-      }),
-      { expirationTtl: JOB_TTL },
-    );
   }
 }
 

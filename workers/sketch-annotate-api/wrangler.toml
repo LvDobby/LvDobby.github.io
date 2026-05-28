@@ -25,7 +25,7 @@ REPLICATE_MODEL = "black-forest-labs/flux-kontext-dev"
 #   wrangler secret put ANNOTATE_TOKEN
 # 若使用 replicate：wrangler secret put REPLICATE_API_TOKEN
 #
-# 异步任务 KV（推荐，避免 OpenRouter 生成超过 Worker 等待时间）：
+# 异步任务 KV（Replicate 轮询等；OpenRouter 改图在 POST 内同步等待，勿用 waitUntil）
 #   wrangler kv namespace create SKETCH_JOBS
 #   将返回的 id 填入下方 [[kv_namespaces]]
 [[kv_namespaces]]

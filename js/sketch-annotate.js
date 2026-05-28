@@ -26,8 +26,9 @@
   var selectedFileId = null;
   var fileIdCounter = 0;
   var generatedDataUrl = null;
-  var POLL_INTERVAL_MS = 2000;
-  var POLL_MAX = 90;
+  var POLL_INTERVAL_MS = 3000;
+  var POLL_MAX = 120;
+  var GENERATE_WAIT_HINT_MS = 3000;
 
   function $(id) {
     return document.getElementById(id);
@@ -424,7 +425,9 @@
             if (data.imageUrl) return data;
           }
           if (data.status === 'failed') throw new Error(data.error || '云端生成失败');
-          if (attempts >= POLL_MAX) throw new Error('生成超时，请稍后重试');
+          if (attempts >= POLL_MAX) {
+            throw new Error('生成超时（已等待约 ' + Math.round((attempts * POLL_INTERVAL_MS) / 60000) + ' 分钟），请稍后重试');
+          }
           setStatus('云端生成中…（' + attempts + '/' + POLL_MAX + '）', true);
           return delay(POLL_INTERVAL_MS).then(tick);
         });
@@ -507,6 +510,13 @@
       var form = new FormData();
       form.append('image', sizedFile);
       form.append('model', modelId);
+
+      var waitStarted = Date.now();
+      var waitTicker = setInterval(function () {
+        var secs = Math.floor((Date.now() - waitStarted) / 1000);
+        setStatus(modelLabel + ' 生成中…已等待 ' + secs + ' 秒，请勿关闭页面', true);
+      }, GENERATE_WAIT_HINT_MS);
+
       return fetch(apiBase + '/api/annotate', {
         method: 'POST',
         headers: headers,
@@ -517,6 +527,9 @@
           if (!res.ok) throw new Error(data.error || '提交失败');
           return data;
         });
+      })
+      .finally(function () {
+        clearInterval(waitTicker);
       })
       .then(function (data) {
         if (data.status === 'succeeded' && data.imageDataUrl) {
