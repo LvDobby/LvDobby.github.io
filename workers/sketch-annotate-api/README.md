@@ -1,6 +1,6 @@
 # sketch-annotate-api（Cloudflare Workers）
 
-为 [生活手绘注释图](/sketch-annotate.html) 提供云端图像编辑代理。**默认使用豆包 Seedream**（`bytedance-seed/seedream-4.5`，经 OpenRouter 调用），在原图基础上叠加手绘注释；异步 KV 任务避免生成超时。
+为 [生活手绘注释图](/sketch-annotate/) 提供云端图像编辑代理。**默认使用豆包 Seedream**（`bytedance-seed/seedream-4.5`，经 OpenRouter 调用），在原图基础上叠加手绘注释；异步 KV 任务避免生成超时。
 
 ## 1. 前置条件
 
