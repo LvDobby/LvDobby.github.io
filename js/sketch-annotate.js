@@ -349,18 +349,18 @@
   }
 
   function isBillingError(msg) {
-    return /insufficient credit|billing|余额不足|充值/i.test(msg || '');
+    return /insufficient credit|billing|余额不足|充值|openrouter\.ai\/credits/i.test(msg || '');
   }
 
   function isConfigError(msg) {
     return (
-      /REPLICATE_API_TOKEN|Unauthorized|未配置 Worker/i.test(msg || '')
+      /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker/i.test(msg || '')
     );
   }
 
   function cloudFallbackLabel(msg) {
     if (isBillingError(msg)) {
-      return '本地引擎（云端降级：Replicate 余额不足，请充值后重试）';
+      return '本地引擎（云端降级：OpenRouter/Replicate 余额不足，请充值后重试）';
     }
     var short = (msg || '未知错误').slice(0, 80);
     return '本地引擎（云端降级：' + short + '）';
@@ -383,7 +383,7 @@
     });
   }
 
-  function pollReplicateJob(apiBase, jobId, headers) {
+  function pollCloudJob(apiBase, jobId, headers) {
     var attempts = 0;
     function tick() {
       attempts += 1;
@@ -395,7 +395,10 @@
           });
         })
         .then(function (data) {
-          if (data.status === 'succeeded' && data.imageUrl) return data;
+          if (data.status === 'succeeded') {
+            if (data.imageDataUrl) return data;
+            if (data.imageUrl) return data;
+          }
           if (data.status === 'failed') throw new Error(data.error || '云端生成失败');
           if (attempts >= POLL_MAX) throw new Error('生成超时，请稍后重试');
           setStatus('云端生成中…（' + attempts + '/' + POLL_MAX + '）', true);
@@ -403,6 +406,32 @@
         });
     }
     return tick();
+  }
+
+  function cloudResultFromStatus(data, apiBase) {
+    if (data.imageDataUrl) {
+      return {
+        generatedUrl: data.imageDataUrl,
+        elements: ['OpenRouter 云端生成'],
+        modeLabel: '云端 OpenRouter 改图（保真原图 + 手绘注释）',
+      };
+    }
+    var imageUrl = data.imageUrl;
+    var fetchUrl = data.proxyUrl ? apiBase + data.proxyUrl : imageUrl;
+    return fetch(fetchUrl).then(function (res) {
+      if (!res.ok) throw new Error('获取生成图失败');
+      return res.blob();
+    }).then(function (blob) {
+      return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' })).then(
+        function (dataUrl) {
+          return {
+            generatedUrl: dataUrl,
+            elements: ['Replicate 云端生成'],
+            modeLabel: '云端 Replicate 改图',
+          };
+        },
+      );
+    });
   }
 
   function generateWithCloudProxy(file) {
@@ -427,26 +456,17 @@
         });
       })
       .then(function (data) {
-        setStatus('任务已创建，等待大模型生成…', true);
-        return pollReplicateJob(apiBase, data.jobId, headers);
+        if (data.status === 'succeeded' && data.imageDataUrl) {
+          return cloudResultFromStatus(data, apiBase);
+        }
+        if (!data.jobId) {
+          throw new Error(data.error || '提交失败');
+        }
+        setStatus('任务已创建，等待 OpenRouter 生成…', true);
+        return pollCloudJob(apiBase, data.jobId, headers);
       })
       .then(function (data) {
-        var imageUrl = data.imageUrl;
-        var fetchUrl = data.proxyUrl ? apiBase + data.proxyUrl : imageUrl;
-        return fetch(fetchUrl, { headers: headers }).then(function (res) {
-          if (!res.ok) throw new Error('获取生成图失败');
-          return res.blob();
-        }).then(function (blob) {
-          return fileToDataUrl(
-            new File([blob], 'generated.png', { type: blob.type || 'image/png' }),
-          ).then(function (dataUrl) {
-            return {
-              generatedUrl: dataUrl,
-              elements: ['云端 Replicate 生成'],
-              modeLabel: '云端大模型改图（' + (window.SKETCH_CONFIG && window.SKETCH_CONFIG.apiUrl ? 'Worker' : apiBase) + '）',
-            };
-          });
-        });
+        return cloudResultFromStatus(data, apiBase);
       });
   }
 
@@ -513,11 +533,11 @@
         var msg = err && err.message ? err.message : String(err);
         if (isConfigError(msg)) {
           throw new Error(
-            msg + '。请在 Worker 目录执行：npx wrangler secret put REPLICATE_API_TOKEN',
+            msg + '。请在 Worker 目录执行：npx wrangler secret put OPENROUTER_API_KEY',
           );
         }
         if (isBillingError(msg)) {
-          setStatus('Replicate 余额不足，正在用本地引擎生成…', true);
+          setStatus('OpenRouter 余额不足，正在用本地引擎生成…', true);
         } else {
           setStatus('云端失败，正在用本地引擎生成…', true);
         }
@@ -525,7 +545,7 @@
           local.modeLabel = cloudFallbackLabel(msg);
           if (isBillingError(msg)) {
             local.analysis.cloudNote =
-              '云端未调用：请在 replicate.com/account/billing 充值后，再选择「云端大模型改图」。';
+              '云端未调用：请在 openrouter.ai/credits 充值后，再选择「云端大模型改图」。';
           }
           return local;
         });

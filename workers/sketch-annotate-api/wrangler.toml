@@ -6,11 +6,24 @@ main = "src/index.js"
 compatibility_date = "2024-11-01"
 
 [vars]
-# 逗号分隔，含本地 Jekyll 预览地址
 ALLOWED_ORIGINS = "https://lvdobby.github.io,http://127.0.0.1:4000,http://localhost:4000"
-# Replicate 模型：owner/name，支持图 + prompt 编辑
+# 图像后端：openrouter（默认）| replicate
+IMAGE_PROVIDER = "openrouter"
+# OpenRouter：图生图 / 图像编辑（保真原图优先用 Gemini 图像模型）
+OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
+# Recraft 专用：越低越贴近原图（仅当 OPENROUTER_MODEL 为 recraft/* 时生效）
+OPENROUTER_IMAGE_STRENGTH = "0.18"
+# 可选 Replicate 回退
 REPLICATE_MODEL = "black-forest-labs/flux-kontext-dev"
 
 # 密钥（勿写入仓库）：
-#   wrangler secret put REPLICATE_API_TOKEN
-#   wrangler secret put ANNOTATE_TOKEN   # 可选，前端 Bearer 鉴权
+#   wrangler secret put OPENROUTER_API_KEY
+#   wrangler secret put ANNOTATE_TOKEN
+# 若使用 replicate：wrangler secret put REPLICATE_API_TOKEN
+#
+# 异步任务 KV（推荐，避免 OpenRouter 生成超过 Worker 等待时间）：
+#   wrangler kv namespace create SKETCH_JOBS
+#   将返回的 id 填入下方 [[kv_namespaces]]
+# [[kv_namespaces]]
+# binding = "SKETCH_JOBS"
+# id = "your_kv_namespace_id"

@@ -1,10 +1,17 @@
-import { SKETCH_PROMPT } from './prompt.js';
+import { generateWithOpenRouter, humanizeOpenRouterError } from './openrouter.js';
+import {
+  createReplicatePrediction,
+  extractOutputUrl,
+  getReplicatePrediction,
+  humanizeReplicateError,
+} from './replicate.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const REPLICATE_HOST_SUFFIX = 'replicate.delivery';
+const JOB_TTL = 3600;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const cors = corsHeaders(request, env);
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors });
@@ -19,11 +26,19 @@ export default {
 
     try {
       if (path === '/api/health' && request.method === 'GET') {
-        return json({ ok: true, model: env.REPLICATE_MODEL }, 200, cors);
+        return json(
+          {
+            ok: true,
+            provider: getProvider(env),
+            model: getModelLabel(env),
+          },
+          200,
+          cors,
+        );
       }
 
       if (path === '/api/annotate' && request.method === 'POST') {
-        return await handleAnnotate(request, env, cors);
+        return await handleAnnotate(request, env, ctx, cors);
       }
 
       if (path === '/api/status' && request.method === 'GET') {
@@ -41,6 +56,17 @@ export default {
     }
   },
 };
+
+function getProvider(env) {
+  return (env.IMAGE_PROVIDER || 'openrouter').toLowerCase();
+}
+
+function getModelLabel(env) {
+  if (getProvider(env) === 'replicate') {
+    return env.REPLICATE_MODEL || 'black-forest-labs/flux-kontext-dev';
+  }
+  return env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-image';
+}
 
 function isOriginAllowed(request, env) {
   const origin = request.headers.get('Origin');
@@ -85,13 +111,9 @@ function requireAuth(request, env, cors) {
   return null;
 }
 
-async function handleAnnotate(request, env, cors) {
+async function handleAnnotate(request, env, ctx, cors) {
   const denied = requireAuth(request, env, cors);
   if (denied) return denied;
-
-  if (!env.REPLICATE_API_TOKEN) {
-    return json({ error: 'Server missing REPLICATE_API_TOKEN' }, 503, cors);
-  }
 
   const form = await request.formData();
   const file = form.get('image');
@@ -105,30 +127,109 @@ async function handleAnnotate(request, env, cors) {
     return json({ error: 'Image exceeds 10MB limit' }, 400, cors);
   }
 
-  try {
-    const dataUri = await fileToDataUri(file);
-    const prediction = await createReplicatePrediction(env, dataUri);
+  const dataUri = await fileToDataUri(file);
+  const provider = getProvider(env);
 
+  if (provider === 'replicate') {
+    return handleAnnotateReplicate(env, dataUri, cors);
+  }
+
+  return handleAnnotateOpenRouter(env, ctx, dataUri, cors);
+}
+
+async function handleAnnotateOpenRouter(env, ctx, dataUri, cors) {
+  if (env.SKETCH_JOBS) {
+    const jobId = crypto.randomUUID();
+    await env.SKETCH_JOBS.put(
+      jobId,
+      JSON.stringify({ status: 'processing', provider: 'openrouter' }),
+      { expirationTtl: JOB_TTL },
+    );
+    ctx.waitUntil(runOpenRouterJob(jobId, dataUri, env));
     return json(
       {
-        jobId: prediction.id,
-        status: prediction.status,
-        message: 'Job created. Poll GET /api/status?id=' + prediction.id,
+        jobId,
+        status: 'processing',
+        provider: 'openrouter',
+        message: 'Poll GET /api/status?id=' + jobId,
+      },
+      200,
+      cors,
+    );
+  }
+
+  try {
+    const imageDataUrl = await generateWithOpenRouter(env, dataUri);
+    return json(
+      {
+        status: 'succeeded',
+        provider: 'openrouter',
+        imageDataUrl,
       },
       200,
       cors,
     );
   } catch (err) {
-    const status = err.httpStatus || 502;
-    return json(
-      {
-        error: humanizeReplicateError(err.message),
-        code: err.code || 'REPLICATE_ERROR',
-      },
-      status,
-      cors,
+    return providerErrorResponse(err, 'openrouter', cors);
+  }
+}
+
+async function runOpenRouterJob(jobId, dataUri, env) {
+  try {
+    const imageDataUrl = await generateWithOpenRouter(env, dataUri);
+    await env.SKETCH_JOBS.put(
+      jobId,
+      JSON.stringify({
+        status: 'succeeded',
+        provider: 'openrouter',
+        imageDataUrl,
+      }),
+      { expirationTtl: JOB_TTL },
+    );
+  } catch (err) {
+    await env.SKETCH_JOBS.put(
+      jobId,
+      JSON.stringify({
+        status: 'failed',
+        provider: 'openrouter',
+        error: humanizeOpenRouterError(err.message),
+        code: err.code,
+      }),
+      { expirationTtl: JOB_TTL },
     );
   }
+}
+
+async function handleAnnotateReplicate(env, dataUri, cors) {
+  try {
+    const prediction = await createReplicatePrediction(env, dataUri);
+    return json(
+      {
+        jobId: prediction.id,
+        status: prediction.status,
+        provider: 'replicate',
+        message: 'Poll GET /api/status?id=' + prediction.id,
+      },
+      200,
+      cors,
+    );
+  } catch (err) {
+    return providerErrorResponse(err, 'replicate', cors);
+  }
+}
+
+function providerErrorResponse(err, provider, cors) {
+  const status = err.httpStatus || 502;
+  const humanize = provider === 'openrouter' ? humanizeOpenRouterError : humanizeReplicateError;
+  return json(
+    {
+      error: humanize(err.message),
+      code: err.code || 'UPSTREAM_ERROR',
+      provider,
+    },
+    status,
+    cors,
+  );
 }
 
 async function handleStatus(url, env, cors) {
@@ -136,12 +237,31 @@ async function handleStatus(url, env, cors) {
   if (!jobId) {
     return json({ error: 'Missing id query parameter' }, 400, cors);
   }
+
+  if (env.SKETCH_JOBS) {
+    const raw = await env.SKETCH_JOBS.get(jobId);
+    if (raw) {
+      const job = JSON.parse(raw);
+      const body = { jobId, status: job.status, provider: job.provider || 'openrouter' };
+      if (job.status === 'succeeded' && job.imageDataUrl) {
+        body.imageDataUrl = job.imageDataUrl;
+      }
+      if (job.status === 'failed') {
+        body.error = job.error || 'Generation failed';
+      }
+      if (job.status === 'processing') {
+        body.message = 'Still processing';
+      }
+      return json(body, 200, cors);
+    }
+  }
+
   if (!env.REPLICATE_API_TOKEN) {
-    return json({ error: 'Server missing REPLICATE_API_TOKEN' }, 503, cors);
+    return json({ error: 'Job not found' }, 404, cors);
   }
 
   const prediction = await getReplicatePrediction(env, jobId);
-  const body = { jobId: prediction.id, status: prediction.status };
+  const body = { jobId: prediction.id, status: prediction.status, provider: 'replicate' };
 
   if (prediction.status === 'succeeded') {
     const imageUrl = extractOutputUrl(prediction.output);
@@ -181,12 +301,14 @@ async function handleProxyImage(url, env, cors) {
   }
 
   const contentType = upstream.headers.get('Content-Type') || 'image/png';
-  const headers = {
-    ...cors,
-    'Content-Type': contentType,
-    'Cache-Control': 'public, max-age=3600',
-  };
-  return new Response(upstream.body, { status: 200, headers });
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      ...cors,
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
 }
 
 function bytesToBase64(bytes) {
@@ -207,84 +329,4 @@ async function fileToDataUri(file) {
   const b64 = bytesToBase64(bytes);
   const mime = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
   return `data:${mime};base64,${b64}`;
-}
-
-function extractReplicateMessage(data) {
-  if (typeof data.detail === 'string') return data.detail;
-  if (typeof data.error === 'string') return data.error;
-  if (Array.isArray(data.detail)) {
-    return data.detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('; ');
-  }
-  return 'Replicate request failed';
-}
-
-function humanizeReplicateError(message) {
-  const m = message || '';
-  if (/insufficient credit/i.test(m)) {
-    return 'Replicate 账户余额不足，请前往 https://replicate.com/account/billing 充值后再使用云端生成';
-  }
-  return m;
-}
-
-function httpStatusForReplicate(message, upstreamStatus) {
-  if (/insufficient credit|billing/i.test(message)) return 402;
-  if (upstreamStatus === 401) return 401;
-  if (upstreamStatus === 422) return 422;
-  if (upstreamStatus >= 400 && upstreamStatus < 500) return upstreamStatus;
-  return 502;
-}
-
-async function createReplicatePrediction(env, dataUri) {
-  const modelPath = env.REPLICATE_MODEL || 'black-forest-labs/flux-kontext-dev';
-  const parts = modelPath.split('/');
-  if (parts.length !== 2) {
-    throw new Error('REPLICATE_MODEL must be owner/name');
-  }
-  const [owner, name] = parts;
-  const endpoint = `https://api.replicate.com/v1/models/${owner}/${name}/predictions`;
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.REPLICATE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      input: {
-        prompt: SKETCH_PROMPT,
-        input_image: dataUri,
-        aspect_ratio: 'match_input_image',
-        output_format: 'png',
-        safety_tolerance: 2,
-      },
-    }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    const message = extractReplicateMessage(data);
-    const err = new Error(message);
-    err.httpStatus = httpStatusForReplicate(message, res.status);
-    err.code = /insufficient credit/i.test(message) ? 'INSUFFICIENT_CREDIT' : 'REPLICATE_UPSTREAM';
-    throw err;
-  }
-  return data;
-}
-
-async function getReplicatePrediction(env, id) {
-  const res = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
-    headers: { Authorization: `Bearer ${env.REPLICATE_API_TOKEN}` },
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.detail || data.error || `Replicate error ${res.status}`);
-  }
-  return data;
-}
-
-function extractOutputUrl(output) {
-  if (!output) return null;
-  if (typeof output === 'string') return output;
-  if (Array.isArray(output) && output.length) return output[0];
-  return null;
 }
