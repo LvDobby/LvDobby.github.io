@@ -31,6 +31,7 @@ export default {
           ok: true,
           provider: getProvider(env),
           model: getModelLabel(env),
+          fallbackModel: env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v3',
           analyzeModel: getAnalyzeModelLabel(env),
           mode: getProvider(env) === 'openrouter' ? 'image-gen' : getProvider(env),
           async: !!env.SKETCH_JOBS,

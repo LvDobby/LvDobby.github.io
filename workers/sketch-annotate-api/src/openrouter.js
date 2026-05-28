@@ -26,9 +26,48 @@ export async function generateWithOpenRouter(env, dataUri) {
     throw err;
   }
 
-  const model = env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-image';
-  const isRecraft = model.startsWith('recraft/');
+  const models = getModelChain(env);
+  let lastErr;
+  for (const model of models) {
+    try {
+      return await generateWithModel(apiKey, env, dataUri, model);
+    } catch (err) {
+      lastErr = err;
+      if (isModelFallbackError(err) && model !== models[models.length - 1]) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
 
+function getModelChain(env) {
+  const primary = env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-image';
+  const fallback = env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v3';
+  return [...new Set([primary, fallback].filter(Boolean))];
+}
+
+async function generateWithModel(apiKey, env, dataUri, model) {
+  const payload = JSON.stringify(buildRequestBody(env, dataUri, model));
+  let lastErr;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await callOpenRouter(apiKey, payload);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_RETRIES && isRetryable(err)) {
+        await sleep(RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+function buildRequestBody(env, dataUri, model) {
+  const isRecraft = model.startsWith('recraft/');
   const body = {
     model,
     messages: [
@@ -44,9 +83,9 @@ export async function generateWithOpenRouter(env, dataUri) {
   };
 
   if (isRecraft) {
-    const strength = parseFloat(env.OPENROUTER_IMAGE_STRENGTH || '0.18', 10);
+    const strength = parseFloat(env.OPENROUTER_IMAGE_STRENGTH || '0.12', 10);
     body.image_config = {
-      strength: Number.isFinite(strength) ? Math.min(1, Math.max(0, strength)) : 0.18,
+      strength: Number.isFinite(strength) ? Math.min(1, Math.max(0, strength)) : 0.12,
     };
   } else {
     body.image_config = {
@@ -54,21 +93,13 @@ export async function generateWithOpenRouter(env, dataUri) {
     };
   }
 
-  const payload = JSON.stringify(body);
-  let lastErr;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    try {
-      return await callOpenRouter(apiKey, payload);
-    } catch (err) {
-      lastErr = err;
-      if (attempt < MAX_RETRIES && isRetryable(err)) {
-        await sleep(RETRY_DELAY_MS * (attempt + 1));
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastErr;
+  return body;
+}
+
+function isModelFallbackError(err) {
+  return /not available in your region|model not found|does not support|unsupported model|no endpoints found/i.test(
+    err.message || '',
+  );
 }
 
 function getOpenRouterApiKey(env) {
@@ -229,6 +260,9 @@ export function humanizeOpenRouterError(message) {
   }
   if (/network connection lost|provider_unavailable|timeout|timed out|overloaded/i.test(m)) {
     return 'OpenRouter 上游暂时不可用（网络中断或生成超时），请稍后重试';
+  }
+  if (/not available in your region|region/i.test(m)) {
+    return 'Gemini 图像模型在当前区域不可用，系统将自动尝试 Recraft 备用模型；若仍失败请在 wrangler.toml 设置 OPENROUTER_MODEL';
   }
   return m;
 }

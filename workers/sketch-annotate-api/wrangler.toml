@@ -11,10 +11,12 @@ ALLOWED_ORIGINS = "https://lvdobby.github.io,http://127.0.0.1:4000,http://localh
 IMAGE_PROVIDER = "openrouter"
 # OpenRouter：图生图 / 图像编辑（客户端默认路径 /api/annotate）
 OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
+# Gemini 区域不可用时自动回退
+OPENROUTER_FALLBACK_MODEL = "recraft/recraft-v3"
 # OpenRouter：视觉分析（可选 /api/analyze，识图 + 文案）
 OPENROUTER_ANALYZE_MODEL = "google/gemini-2.5-flash"
 # Recraft 专用：越低越贴近原图（仅当 OPENROUTER_MODEL 为 recraft/* 时生效）
-OPENROUTER_IMAGE_STRENGTH = "0.18"
+OPENROUTER_IMAGE_STRENGTH = "0.12"
 # 可选 Replicate 回退
 REPLICATE_MODEL = "black-forest-labs/flux-kontext-dev"
 
