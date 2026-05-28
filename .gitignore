@@ -33,3 +33,10 @@ Temporary Items
 
 # debug file
 _site
+
+# Node / Workers
+node_modules/
+workers/node_modules/
+workers/sketch-annotate-api/node_modules/
+workers/sketch-annotate-api/.wrangler/
+workers/sketch-annotate-api/.dev.vars

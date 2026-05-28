@@ -10,9 +10,17 @@
 
 ## 2. 安装与登录
 
+**重要：** 必须在 Worker 目录或 `workers/` 目录安装，**不要**在博客仓库根目录执行 `npm install`（根目录是旧的 Grunt 博客构建依赖，会装错包）。
+
 ```bash
+# 方式 A（推荐）：在 workers 目录用 workspace 安装
+cd workers
+npm install
+
+# 方式 B：直接进入子项目
 cd workers/sketch-annotate-api
 npm install
+
 npx wrangler login
 ```
 

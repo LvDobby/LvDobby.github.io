@@ -1,0 +1,16 @@
+{
+  "name": "lvdobby-blog-workers",
+  "private": true,
+  "description": "Cloudflare Workers for LvDobby blog — 请在本目录执行 npm install，勿在仓库根目录为 Worker 安装依赖",
+  "workspaces": [
+    "sketch-annotate-api"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w sketch-annotate-api",
+    "deploy": "npm run deploy -w sketch-annotate-api",
+    "tail": "npm run tail -w sketch-annotate-api"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
