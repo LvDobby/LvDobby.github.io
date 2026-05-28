@@ -1,6 +1,6 @@
 # sketch-annotate-api（Cloudflare Workers）
 
-为 [生活手绘注释图](/sketch-annotate.html) 提供云端图像编辑代理。**默认使用 OpenRouter**（`google/gemini-2.5-flash-image`），强调**在原图基础上叠加**手绘注释，而非整张重绘。
+为 [生活手绘注释图](/sketch-annotate.html) 提供云端识图代理。**默认混合模式**：OpenRouter 视觉模型识图并生成情境文案，浏览器端 Canvas 沿物体边缘精绘白色描线（保真原图）。
 
 ## 1. 前置条件
 
@@ -55,15 +55,18 @@ npm run deploy
 
 记下 `https://sketch-annotate-api.<子域>.workers.dev`，填入博客 `_config.yml` 的 `sketch_api_url`。
 
-## 6. 模型说明（保真原图）
+## 6. 模型说明
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `IMAGE_PROVIDER` | `openrouter` | `openrouter` 或 `replicate` |
-| `OPENROUTER_MODEL` | `google/gemini-2.5-flash-image` | 支持「图进图出」，适合生活照编辑 |
-| `OPENROUTER_IMAGE_STRENGTH` | `0.18` | 仅 **Recraft** 模型：越低越贴近原图 |
+| `OPENROUTER_ANALYZE_MODEL` | `google/gemini-2.5-flash` | **推荐**：识图 + 情境文案（`/api/analyze`） |
+| `OPENROUTER_MODEL` | `google/gemini-2.5-flash-image` | 仅 `/api/annotate` 整图生成（不推荐） |
+| `OPENROUTER_IMAGE_STRENGTH` | `0.18` | 仅 **Recraft** 模型 |
 
-若更偏向「几乎不改原图只加线」，可尝试：
+客户端「云端大模型改图」现已改为：**云端识图 → 本地沿边缘描线 + 叠加文案**，效果远好于整图重绘。
+
+若仍想尝试整图生成，可调用 `POST /api/annotate`；或调整：
 
 ```toml
 OPENROUTER_MODEL = "recraft/recraft-v3"
@@ -87,8 +90,9 @@ npx wrangler secret put REPLICATE_API_TOKEN
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/health` | `{ provider, model }` |
-| POST | `/api/annotate` | 上传 `image`；可能直接返回 `imageDataUrl`，或 `jobId` 需轮询 |
+| GET | `/api/health` | `{ provider, analyzeModel, mode }` |
+| POST | `/api/analyze` | 上传 `image`；返回 `{ analysis: { elements, labels } }`（推荐） |
+| POST | `/api/annotate` | 上传 `image`；整图生成（旧路径，可能 `jobId` 需轮询） |
 | GET | `/api/status?id=` | 查询任务 |
 | GET | `/api/proxy-image?url=` | 仅 Replicate 外链图代理 |
 

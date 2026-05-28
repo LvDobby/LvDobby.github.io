@@ -1,4 +1,5 @@
-import { generateWithOpenRouter, humanizeOpenRouterError } from './openrouter.js';
+import { generateWithOpenRouter, humanizeOpenRouterError, verifyOpenRouterKey, getOpenRouterApiKey } from './openrouter.js';
+import { analyzeImageWithOpenRouter } from './analyze.js';
 import {
   createReplicatePrediction,
   extractOutputUrl,
@@ -26,16 +27,22 @@ export default {
 
     try {
       if (path === '/api/health' && request.method === 'GET') {
-        return json(
-          {
-            ok: true,
-            provider: getProvider(env),
-            model: getModelLabel(env),
-            async: !!env.SKETCH_JOBS,
-          },
-          200,
-          cors,
-        );
+        const body = {
+          ok: true,
+          provider: getProvider(env),
+          model: getModelLabel(env),
+          analyzeModel: getAnalyzeModelLabel(env),
+          mode: getProvider(env) === 'openrouter' ? 'hybrid' : getProvider(env),
+          async: !!env.SKETCH_JOBS,
+        };
+        if (url.searchParams.get('verify') === '1' && getProvider(env) === 'openrouter') {
+          body.openrouterKey = await verifyOpenRouterKey(env);
+        }
+        return json(body, 200, cors);
+      }
+
+      if (path === '/api/analyze' && request.method === 'POST') {
+        return await handleAnalyze(request, env, cors);
       }
 
       if (path === '/api/annotate' && request.method === 'POST') {
@@ -60,6 +67,10 @@ export default {
 
 function getProvider(env) {
   return (env.IMAGE_PROVIDER || 'openrouter').toLowerCase();
+}
+
+function getAnalyzeModelLabel(env) {
+  return env.OPENROUTER_ANALYZE_MODEL || 'google/gemini-2.5-flash';
 }
 
 function getModelLabel(env) {
@@ -110,6 +121,38 @@ function requireAuth(request, env, cors) {
     return json({ error: 'Unauthorized' }, 401, cors);
   }
   return null;
+}
+
+async function handleAnalyze(request, env, cors) {
+  const denied = requireAuth(request, env, cors);
+  if (denied) return denied;
+
+  const form = await request.formData();
+  const file = form.get('image');
+  if (!file || typeof file === 'string') {
+    return json({ error: 'Missing image field' }, 400, cors);
+  }
+  if (!file.type.startsWith('image/')) {
+    return json({ error: 'File must be an image' }, 400, cors);
+  }
+  if (file.size > MAX_BYTES) {
+    return json({ error: 'Image exceeds 10MB limit' }, 400, cors);
+  }
+
+  if (getProvider(env) !== 'openrouter') {
+    return json({ error: 'Analyze endpoint requires IMAGE_PROVIDER=openrouter' }, 400, cors);
+  }
+  if (!getOpenRouterApiKey(env)) {
+    return json({ error: 'Server missing OPENROUTER_API_KEY', code: 'MISSING_API_KEY' }, 503, cors);
+  }
+
+  try {
+    const dataUri = await fileToDataUri(file);
+    const analysis = await analyzeImageWithOpenRouter(env, dataUri);
+    return json({ status: 'succeeded', provider: 'openrouter', mode: 'hybrid', analysis }, 200, cors);
+  } catch (err) {
+    return providerErrorResponse(err, 'openrouter', cors);
+  }
 }
 
 async function handleAnnotate(request, env, ctx, cors) {

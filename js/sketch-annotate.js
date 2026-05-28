@@ -115,7 +115,7 @@
       }
     }
     var mag = new Float32Array(w * h);
-    var gx, gy, m, threshold = 42;
+    var gx, gy, m, threshold = 32;
     for (y = 1; y < h - 1; y++) {
       for (x = 1; x < w - 1; x++) {
         gx =
@@ -146,7 +146,7 @@
     for (y = step; y < h - step; y += step) {
       for (x = step; x < w - step; x += step) {
         v = mag[y * w + x];
-        if (v > 0 && Math.random() < 0.35) {
+        if (v > 0 && Math.random() < 0.48) {
           points.push({
             x: x + (Math.random() - 0.5) * step * 0.6,
             y: y + (Math.random() - 0.5) * step * 0.6,
@@ -302,7 +302,7 @@
     tctx.drawImage(img, 0, 0, w, h);
     var id = tctx.getImageData(0, 0, w, h);
     var mag = sobelEdges(id, w, h);
-    var points = sampleEdgePoints(mag, w, h, Math.min(120, Math.floor((w * h) / 8000)));
+    var points = sampleEdgePoints(mag, w, h, Math.min(200, Math.floor((w * h) / 5500)));
 
     ctx.strokeStyle = 'rgba(255,255,255,0.88)';
     ctx.lineWidth = 2;
@@ -314,7 +314,7 @@
       a = points[i];
       b = points[i + 1];
       if (!b) break;
-      if (Math.hypot(a.x - b.x, a.y - b.y) < 120) drawSketchStroke(ctx, a, b);
+      if (Math.hypot(a.x - b.x, a.y - b.y) < 150) drawSketchStroke(ctx, a, b);
     }
 
     if (points.length > 4) {
@@ -436,6 +436,70 @@
     });
   }
 
+  function clamp01(value, fallback) {
+    var n = Number(value);
+    if (!isFinite(n)) return fallback;
+    return Math.min(0.92, Math.max(0.05, n));
+  }
+
+  function normalizeCloudAnalysis(data) {
+    if (!data || !Array.isArray(data.labels)) return defaultAnalysis();
+    var labels = data.labels
+      .map(function (lb) {
+        return {
+          text: String(lb.text || '').trim().slice(0, 48),
+          x: clamp01(lb.x, 0.1),
+          y: clamp01(lb.y, 0.5),
+          type: lb.type || 'other',
+        };
+      })
+      .filter(function (lb) {
+        return lb.text.length >= 2;
+      });
+    if (labels.length < 2) return defaultAnalysis();
+    return {
+      elements: Array.isArray(data.elements) && data.elements.length ? data.elements.slice(0, 8) : ['生活场景'],
+      labels: labels.slice(0, 6),
+    };
+  }
+
+  function generateWithCloudHybrid(file) {
+    var apiBase = getApiBase();
+    if (!apiBase) {
+      return Promise.reject(new Error('未配置 Worker API 地址，请在高级设置或 _config.yml 中填写 sketch_api_url'));
+    }
+    var headers = getAuthHeaders();
+    var form = new FormData();
+    form.append('image', file);
+
+    setStatus('云端识图中，分析场景与文案…', true);
+    return fetch(apiBase + '/api/analyze', {
+      method: 'POST',
+      headers: headers,
+      body: form,
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || '识图失败');
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (!data.analysis) throw new Error(data.error || '识图结果无效');
+        var analysis = normalizeCloudAnalysis(data.analysis);
+        setStatus('识图完成，正在沿边缘精绘描线…', true);
+        return loadImageFromFile(file).then(function (img) {
+          var result = renderAnnotated(img, analysis);
+          return {
+            generatedUrl: result.dataUrl,
+            elements: analysis.elements,
+            analysis: analysis,
+            modeLabel: '云端识图 + 本地精绘（沿边缘描线 + 情境文案）',
+          };
+        });
+      });
+  }
+
   function generateWithCloudProxy(file) {
     var apiBase = getApiBase();
     if (!apiBase) {
@@ -522,11 +586,11 @@
 
     var pipeline = useCloud
       ? originalDataUrlPromise.then(function (originalDataUrl) {
-          return generateWithCloudProxy(currentFile).then(function (payload) {
+          return generateWithCloudHybrid(currentFile).then(function (payload) {
             return {
               originalUrl: originalDataUrl,
               generatedUrl: payload.generatedUrl,
-              analysis: { elements: payload.elements },
+              analysis: payload.analysis || { elements: payload.elements },
               modeLabel: payload.modeLabel,
             };
           });

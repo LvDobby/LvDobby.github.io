@@ -15,7 +15,7 @@ const RETRY_DELAY_MS = 1500;
  * @returns {Promise<string>} 生成图的 data URL
  */
 export async function generateWithOpenRouter(env, dataUri) {
-  const apiKey = env.OPENROUTER_API_KEY;
+  const apiKey = getOpenRouterApiKey(env);
   if (!apiKey) {
     const err = new Error('Server missing OPENROUTER_API_KEY');
     err.httpStatus = 503;
@@ -66,6 +66,39 @@ export async function generateWithOpenRouter(env, dataUri) {
     }
   }
   throw lastErr;
+}
+
+function getOpenRouterApiKey(env) {
+  return (env.OPENROUTER_API_KEY || '').trim();
+}
+
+export { getOpenRouterApiKey };
+
+/** @returns {Promise<{ ok: boolean, reason?: string, label?: string }>} */
+export async function verifyOpenRouterKey(env) {
+  const apiKey = getOpenRouterApiKey(env);
+  if (!apiKey) return { ok: false, reason: 'missing' };
+  if (!/^sk-or-v1-/.test(apiKey)) {
+    return {
+      ok: false,
+      reason: 'invalid_format',
+      hint: `Key must start with sk-or-v1- (OpenRouter). Stored length=${apiKey.length}, prefix=${apiKey.slice(0, 4) || '(empty)'}`,
+    };
+  }
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      return { ok: true, label: data?.data?.label || 'valid' };
+    }
+    const reason = data?.error?.message || data?.message || `HTTP ${res.status}`;
+    return { ok: false, reason };
+  } catch (e) {
+    return { ok: false, reason: e.message || 'network_error' };
+  }
 }
 
 async function callOpenRouter(apiKey, payload) {
