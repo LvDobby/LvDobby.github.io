@@ -1,6 +1,6 @@
 # sketch-annotate-api（Cloudflare Workers）
 
-为 [生活手绘注释图](/sketch-annotate.html) 提供云端图像编辑代理。**默认使用 Recraft**（`recraft/recraft-v3`），在原图基础上叠加手绘注释；异步 KV 任务避免生成超时。
+为 [生活手绘注释图](/sketch-annotate.html) 提供云端图像编辑代理。**默认使用豆包 Seedream**（`bytedance-seed/seedream-4.5`，经 OpenRouter 调用），在原图基础上叠加手绘注释；异步 KV 任务避免生成超时。
 
 ## 1. 前置条件
 
@@ -60,24 +60,17 @@ npm run deploy
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `IMAGE_PROVIDER` | `openrouter` | `openrouter` 或 `replicate` |
-| `OPENROUTER_MODEL` | `recraft/recraft-v3` | **默认**：图生图整图编辑（`/api/annotate`） |
+| `OPENROUTER_MODEL` | `bytedance-seed/seedream-4.5` | **默认**：豆包 Seedream 图生图/编辑（`/api/annotate`） |
 | `OPENROUTER_FALLBACK_MODEL` | （空） | 可选备用模型 |
 | `OPENROUTER_ANALYZE_MODEL` | `google/gemini-2.5-flash` | 可选：识图 + 文案（`/api/analyze`） |
-| `OPENROUTER_IMAGE_STRENGTH` | `0.12` | Recraft 图生图强度，越低越贴近原图 |
+| `OPENROUTER_IMAGE_STRENGTH` | `0.12` | 仅 **Recraft** 模型 |
 
-若需改用 Gemini 图像模型：
-
-```toml
-OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
-```
-
-若更偏向「几乎不改原图只加线」，可降低 strength：
+若需改用 Recraft 或 Gemini 图像模型：
 
 ```toml
-OPENROUTER_IMAGE_STRENGTH = "0.08"
+OPENROUTER_MODEL = "recraft/recraft-v3"
+# 或 OPENROUTER_MODEL = "google/gemini-2.5-flash-image"
 ```
-
-（Recraft 对中文手写字支持可能弱于 Gemini，请自行对比。）
 
 ## 7. 回退到 Replicate
 

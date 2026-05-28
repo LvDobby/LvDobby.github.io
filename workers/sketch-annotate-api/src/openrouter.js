@@ -1,13 +1,7 @@
-import { SKETCH_PROMPT, RECRAFT_EDIT_PROMPT } from './prompt.js';
+import { DOUBAO_EDIT_PROMPT, EDIT_PROMPT, RECRAFT_EDIT_PROMPT } from './prompt.js';
 
-/** 强调在原图基础上为每个元素叠加手绘注释 */
-export const EDIT_PROMPT =
-  '【任务】图像编辑：在原图基础上叠加手绘注释，输出编辑后的完整图片。\n' +
-  '【硬性要求】\n' +
-  '1. 必须基于我上传的原图修改，保留原图主体、构图、光线与色彩\n' +
-  '2. 为画面中每个主要元素分别添加有意义的手绘注释（轮廓线 + 短文案 + 少量装饰）\n' +
-  '3. 不要整图重绘、不要换场景、不要改变原图内容\n\n' +
-  SKETCH_PROMPT;
+/** @deprecated 使用 DOUBAO_EDIT_PROMPT；保留导出供兼容 */
+export const SKETCH_PROMPT = DOUBAO_EDIT_PROMPT;
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
@@ -43,15 +37,20 @@ export async function generateWithOpenRouter(env, dataUri) {
 }
 
 function getModelChain(env) {
-  const primary = env.OPENROUTER_MODEL || 'recraft/recraft-v3';
-  const fallback = (env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v4').trim();
+  const primary = env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
+  const fallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
   const chain = [primary];
   if (fallback && fallback !== primary) chain.push(fallback);
   return chain;
 }
 
+function isDoubaoModel(model) {
+  return model.startsWith('bytedance-seed/') || /seedream|doubao/i.test(model);
+}
+
 function getEditPrompt(model) {
   if (model.startsWith('recraft/')) return RECRAFT_EDIT_PROMPT;
+  if (isDoubaoModel(model)) return DOUBAO_EDIT_PROMPT;
   return EDIT_PROMPT;
 }
 
@@ -75,6 +74,7 @@ async function generateWithModel(apiKey, env, dataUri, model) {
 
 function buildRequestBody(env, dataUri, model) {
   const isRecraft = model.startsWith('recraft/');
+  const isDoubao = isDoubaoModel(model);
   const body = {
     model,
     messages: [
@@ -94,6 +94,10 @@ function buildRequestBody(env, dataUri, model) {
     body.image_config = {
       strength: Number.isFinite(strength) ? Math.min(1, Math.max(0, strength)) : 0.12,
     };
+  } else if (isDoubao) {
+    body.image_config = {
+      image_size: '2K',
+    };
   } else {
     body.image_config = {
       image_size: '1K',
@@ -103,10 +107,12 @@ function buildRequestBody(env, dataUri, model) {
   return body;
 }
 
-/** Gemini 等支持 image+text；Recraft/Flux 等仅 image 输出 */
+/** Gemini 等支持 image+text；Recraft/豆包/Flux 等仅 image 输出 */
 function getOutputModalities(model) {
   if (
     model.startsWith('recraft/') ||
+    model.startsWith('bytedance-seed/') ||
+    /seedream|doubao/i.test(model) ||
     model.startsWith('black-forest-labs/') ||
     model.startsWith('sourceful/')
   ) {
@@ -280,7 +286,15 @@ function httpStatusForOpenRouter(message, upstreamStatus) {
 }
 
 export function humanizeOpenRouterError(message) {
-  const m = message || '';
+  let m = message || '';
+  try {
+    if (m.trim().startsWith('{')) {
+      const obj = JSON.parse(m);
+      m = obj.message || obj.code || m;
+    }
+  } catch {
+    /* keep original */
+  }
   if (/credit|balance|billing|insufficient/i.test(m)) {
     return 'OpenRouter 余额不足，请前往 https://openrouter.ai/credits 充值后再试';
   }
@@ -294,7 +308,10 @@ export function humanizeOpenRouterError(message) {
     return 'Gemini 图像模型在当前区域不可用，系统将自动尝试 Recraft 备用模型；若仍失败请在 wrangler.toml 设置 OPENROUTER_MODEL';
   }
   if (/provider returned error/i.test(m)) {
-    return 'Recraft 图像生成失败，请换一张较小的图片重试，或稍后再试';
+    return 'Recraft 图像生成失败，请换一张较小的 JPG/PNG 图片重试，或稍后再试';
+  }
+  if (/invalid_image_format|unknown format|仅支持 JPG/i.test(m)) {
+    return '图片格式不支持，请使用 JPG 或 PNG（iPhone 可在「设置→相机→格式」选「最兼容」）';
   }
   return m;
 }

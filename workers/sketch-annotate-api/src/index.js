@@ -1,5 +1,6 @@
 import { generateWithOpenRouter, humanizeOpenRouterError, verifyOpenRouterKey, getOpenRouterApiKey } from './openrouter.js';
 import { analyzeImageWithOpenRouter } from './analyze.js';
+import { fileToDataUri } from './image.js';
 import {
   createReplicatePrediction,
   extractOutputUrl,
@@ -31,7 +32,7 @@ export default {
           ok: true,
           provider: getProvider(env),
           model: getModelLabel(env),
-          fallbackModel: env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v4',
+          fallbackModel: env.OPENROUTER_FALLBACK_MODEL || null,
           analyzeModel: getAnalyzeModelLabel(env),
           mode: getProvider(env) === 'openrouter' ? 'image-gen' : getProvider(env),
           async: !!env.SKETCH_JOBS,
@@ -78,7 +79,7 @@ function getModelLabel(env) {
   if (getProvider(env) === 'replicate') {
     return env.REPLICATE_MODEL || 'black-forest-labs/flux-kontext-dev';
   }
-  return env.OPENROUTER_MODEL || 'recraft/recraft-v3';
+  return env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
 }
 
 function isOriginAllowed(request, env) {
@@ -357,22 +358,3 @@ async function handleProxyImage(url, env, cors) {
   });
 }
 
-function bytesToBase64(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
-    for (let j = 0; j < slice.length; j++) {
-      binary += String.fromCharCode(slice[j]);
-    }
-  }
-  return btoa(binary);
-}
-
-async function fileToDataUri(file) {
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const b64 = bytesToBase64(bytes);
-  const mime = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
-  return `data:${mime};base64,${b64}`;
-}

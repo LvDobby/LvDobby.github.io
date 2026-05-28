@@ -6,11 +6,8 @@
   'use strict';
 
   var SKETCH_PROMPT =
-    '在原图基础上为每个元素添加有意义的手绘注释。' +
-    '白色细线手绘笔、一笔画松弛风格、沿物体边缘描轮廓；适量箭头虚线；' +
-    '中文手写口语短句、碎碎念小情绪；' +
-    '饮品写味道温度，食物写口感，环境写氛围，整体一句总结；' +
-    '少量热气星星爱心表情；小红书随手记录、松弛自然。';
+    '观察照片元素，为每个元素添加有意义的手绘注释。' +
+    '白色细线手绘、沿物体边缘描轮廓；中文手写口语短句；小红书随手记录风格。';
 
   var COPY = {
     drink: ['冰冰的，好清爽', '一口下去，有点醒神', '温温的，挺治愈', '甜度刚好，不腻'],
@@ -354,7 +351,7 @@
 
   function isConfigError(msg) {
     return (
-      /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker|User not found|API Key 无效|invalid.*key/i.test(
+      /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker|User not found|API Key 无效|invalid.*key|JPG\/PNG|图片格式/i.test(
         msg || '',
       )
     );
@@ -414,8 +411,8 @@
     if (data.imageDataUrl) {
       return {
         generatedUrl: data.imageDataUrl,
-        elements: ['OpenRouter 云端生成'],
-        modeLabel: '云端 OpenRouter 改图（保真原图 + 手绘注释）',
+        elements: ['豆包 Seedream 云端生成'],
+        modeLabel: '云端豆包 Seedream 改图（保真原图 + 手绘注释）',
       };
     }
     var imageUrl = data.imageUrl;
@@ -442,12 +439,23 @@
       var canvas = document.createElement('canvas');
       canvas.width = size.w;
       canvas.height = size.h;
-      canvas.getContext('2d').drawImage(img, 0, 0, size.w, size.h);
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size.w, size.h);
+      ctx.drawImage(img, 0, 0, size.w, size.h);
       return new Promise(function (resolve, reject) {
         canvas.toBlob(
           function (blob) {
             if (!blob) {
-              reject(new Error('图片压缩失败'));
+              canvas.toBlob(function (pngBlob) {
+                if (!pngBlob) {
+                  reject(new Error('图片压缩失败，请改用 JPG 或 PNG'));
+                  return;
+                }
+                resolve(
+                  new File([pngBlob], file.name.replace(/\.\w+$/, '') + '.png', { type: 'image/png' }),
+                );
+              }, 'image/png');
               return;
             }
             resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
