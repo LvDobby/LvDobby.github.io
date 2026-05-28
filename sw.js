@@ -6,7 +6,7 @@
  * Register service worker.
  * ========================================================== */
 
-const PRECACHE = 'precache-v2';
+const PRECACHE = 'precache-v3';
 const RUNTIME = 'runtime';
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
@@ -68,6 +68,11 @@ self.addEventListener('fetch', (event) => {
 
   const { hostname } = requestUrl;
   if (!HOSTNAME_WHITELIST.includes(hostname)) {
+    return;
+  }
+
+  // 手绘注释页脚本需及时更新，不走 SW 缓存
+  if (/\/js\/sketch-annotate\.js/i.test(requestUrl.pathname)) {
     return;
   }
 

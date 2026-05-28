@@ -616,7 +616,17 @@
             }
             throw new Error('提交失败（HTTP ' + res.status + '）');
           }
-          if (!res.ok) throw new Error(data.error || '提交失败');
+          var hasImage =
+            data.imageFetchUrl || data.imageDataUrl || data.imageUrl;
+          if (!res.ok && data.status !== 'succeeded') {
+            throw new Error(data.error || '提交失败（HTTP ' + res.status + '）');
+          }
+          if (!res.ok && data.status === 'succeeded' && hasImage) {
+            return data;
+          }
+          if (!res.ok) {
+            throw new Error(data.error || '提交失败（HTTP ' + res.status + '）');
+          }
           return data;
         });
       })
@@ -624,11 +634,11 @@
         clearInterval(waitTicker);
       })
       .then(function (data) {
-        if (
-          data.status === 'succeeded' &&
-          (data.imageFetchUrl || data.imageDataUrl || data.imageUrl)
-        ) {
-          return cloudResultFromStatus(data, apiBase, headers);
+        if (data.status === 'succeeded') {
+          if (data.imageFetchUrl || data.imageDataUrl || data.imageUrl) {
+            return cloudResultFromStatus(data, apiBase, headers);
+          }
+          throw new Error('云端返回成功但未包含图片，请强制刷新页面后重试');
         }
         if (!data.jobId) {
           throw new Error(data.error || '提交失败');

@@ -204,7 +204,7 @@ async function handleAnnotate(request, env, ctx, cors) {
     return handleAnnotateReplicate(env, dataUri, cors);
   }
 
-  return handleAnnotateOpenRouter(env, ctx, dataUri, cors, model);
+  return handleAnnotateOpenRouter(env, ctx, dataUri, cors, model, request);
 }
 
 function resolveAnnotateModel(raw, env) {
@@ -218,10 +218,17 @@ function resolveAnnotateModel(raw, env) {
  * 不可使用 ctx.waitUntil + KV 异步：客户端收到 jobId 后会断开连接，
  * waitUntil 仅延长约 30s，长时生成会被中断并一直停在 processing。
  */
-async function handleAnnotateOpenRouter(env, _ctx, dataUri, cors, model) {
+async function handleAnnotateOpenRouter(env, _ctx, dataUri, cors, model, request) {
   try {
     const imageRef = await generateWithOpenRouter(env, dataUri, model);
-    const body = await buildAnnotateSuccessBody(env, imageRef, { model }, ensureDataUri);
+    const requestUrl = request ? new URL(request.url) : null;
+    const body = await buildAnnotateSuccessBody(
+      env,
+      imageRef,
+      { model },
+      ensureDataUri,
+      requestUrl,
+    );
     return json(body, 200, cors);
   } catch (err) {
     return providerErrorResponse(err, 'openrouter', cors);

@@ -27,8 +27,9 @@ export function parseDataUrl(dataUrl) {
  * @param {string} imageRef data URL 或 https 临时链
  * @param {object} meta 如 { model }
  * @param {(url: string) => Promise<string>} ensureDataUri
+ * @param {URL} [requestUrl] 用于生成绝对 imageUrl，兼容未识别 imageFetchUrl 的旧前端
  */
-export async function buildAnnotateSuccessBody(env, imageRef, meta, ensureDataUri) {
+export async function buildAnnotateSuccessBody(env, imageRef, meta, ensureDataUri, requestUrl) {
   const raw = (imageRef || '').trim();
   if (!raw) {
     const err = new Error('OpenRouter 未返回图片');
@@ -60,10 +61,12 @@ export async function buildAnnotateSuccessBody(env, imageRef, meta, ensureDataUr
   await env.SKETCH_JOBS.put(`${RESULT_KV_PREFIX}${resultId}`, dataUrl, {
     expirationTtl: 3600,
   });
-  return {
-    ...base,
-    imageFetchUrl: `/api/result?id=${encodeURIComponent(resultId)}`,
-  };
+  const imageFetchUrl = `/api/result?id=${encodeURIComponent(resultId)}`;
+  const body = { ...base, imageFetchUrl };
+  if (requestUrl) {
+    body.imageUrl = new URL(imageFetchUrl, requestUrl).href;
+  }
+  return body;
 }
 
 /**
