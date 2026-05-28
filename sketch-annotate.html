@@ -1,0 +1,71 @@
+---
+layout: page
+title: 生活手绘注释图
+description: 上传照片，生成小红书风格手绘标注
+header-img: img/post-bg-desk.jpg
+---
+
+<link rel="stylesheet" href="{{ '/css/sketch-annotate.css' | prepend: site.baseurl }}">
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+
+<div class="sketch-tool">
+  <p class="post-content-preview" style="margin-bottom: 24px;">
+    上传一张日常照片，系统将按<strong>小红书随手记录</strong>风格为你添加白色手绘线条、口语化中文标注与少量装饰。
+    生成完成后可对比原图与效果图，并一键下载。
+  </p>
+
+  <input type="file" id="sketch-file-input" accept="image/*" hidden>
+
+  <div id="sketch-upload-zone" class="sketch-upload-zone" role="button" tabindex="0" aria-label="选择图片上传">
+    <i class="fa fa-cloud-upload"></i>
+    <p>点击或拖拽图片到此处上传</p>
+    <p class="hint">支持 JPG、PNG、WebP，最大 10MB</p>
+  </div>
+
+  <div class="sketch-actions">
+    <button type="button" id="sketch-btn-generate" class="btn btn-primary">
+      <i class="fa fa-magic"></i> 生成手绘注释图
+    </button>
+  </div>
+
+  <p id="sketch-status" class="sketch-status">等待上传图片…</p>
+
+  <div id="sketch-results" class="sketch-results">
+    <div class="sketch-result-block">
+      <h4>① 原始上传图片</h4>
+      <div class="sketch-img-wrap">
+        <img id="sketch-img-original" alt="原始上传图片">
+      </div>
+    </div>
+
+    <div class="sketch-result-block">
+      <h4>② AI 生成手绘注释图</h4>
+      <div class="sketch-img-wrap">
+        <img id="sketch-img-generated" alt="AI 生成手绘注释图">
+      </div>
+      <div class="sketch-download-row">
+        <a id="sketch-btn-download" class="btn btn-default" download="生活手绘注释图.png">
+          <i class="fa fa-download"></i> 下载图片
+        </a>
+      </div>
+      <div id="sketch-elements" class="sketch-elements"></div>
+    </div>
+  </div>
+
+  <details class="sketch-advanced">
+    <summary>高级设置（可选：接入 Claude 视觉 API 以智能识别画面元素与文案）</summary>
+    <div class="form-group">
+      <label for="sketch-api-key">Anthropic API Key（仅保存在本机浏览器，不会上传至本站服务器）</label>
+      <input type="password" id="sketch-api-key" class="form-control" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="sketch-api-endpoint">API 地址（留空使用官方默认）</label>
+      <input type="text" id="sketch-api-endpoint" class="form-control" placeholder="https://api.anthropic.com/v1/messages">
+    </div>
+    <p class="hint" style="font-size: 13px; color: #999;">
+      未填写 API Key 时，将使用内置规则引擎在浏览器本地生成手绘效果（无需联网调用大模型）。
+    </p>
+  </details>
+</div>
+
+<script src="{{ '/js/sketch-annotate.js' | prepend: site.baseurl }}"></script>

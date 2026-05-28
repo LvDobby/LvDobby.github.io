@@ -3,6 +3,24 @@ layout: page
 description: "Thinking will not overcome fear but action will."
 ---
 
+<div class="post-preview">
+    <a href="{{ '/sketch-annotate.html' | prepend: site.baseurl }}">
+        <h2 class="post-title">
+            生活手绘注释图
+        </h2>
+        <h3 class="post-subtitle">
+            上传照片，生成小红书风格手绘标注
+        </h3>
+        <div class="post-content-preview">
+            支持本地图片上传、原图与生成图对比预览、一键下载保存。把日常照片变成松弛自然的生活记录质感。
+        </div>
+    </a>
+    <p class="post-meta">
+        Posted by {% if site.author %}{{ site.author }}{% else %}{{ site.title }}{% endif %} · 站点功能
+    </p>
+</div>
+<hr>
+
 {% for post in paginator.posts %}
 {% if post.redirect %}
     {% assign post_href = post.redirect | prepend: site.baseurl %}
