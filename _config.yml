@@ -11,7 +11,7 @@ github_repo: "https://github.com/LvDobby/LvDobby.github.io.git" # you code repos
 
 # 手绘注释图 — Cloudflare Worker（部署后填入 *.workers.dev 地址，留空则仅本地生成）
 # 例: https://sketch-annotate-api.your-subdomain.workers.dev
-sketch_api_url: ""
+sketch_api_url: "https://sketch-annotate-api.lvdobby.workers.dev"
 
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
@@ -116,3 +116,5 @@ friends: [
         href: "https://developer.apple.com/"
     }
 ]
+
+sketch_api_url: "https://sketch-annotate-api.lvdobby.workers.dev"
