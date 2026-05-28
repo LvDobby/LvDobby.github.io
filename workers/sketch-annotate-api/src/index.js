@@ -12,6 +12,12 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const REPLICATE_HOST_SUFFIX = 'replicate.delivery';
 const JOB_TTL = 3600;
 
+/** 前端可选模型（与 sketch-annotate.html 单选值一致） */
+const ALLOWED_IMAGE_MODELS = new Set([
+  'bytedance-seed/seedream-4.5',
+  'google/gemini-3-pro-image-preview',
+]);
+
 export default {
   async fetch(request, env, ctx) {
     const cors = corsHeaders(request, env);
@@ -175,28 +181,36 @@ async function handleAnnotate(request, env, ctx, cors) {
 
   const dataUri = await fileToDataUri(file);
   const provider = getProvider(env);
+  const model = resolveAnnotateModel(form.get('model'), env);
 
   if (provider === 'replicate') {
     return handleAnnotateReplicate(env, dataUri, cors);
   }
 
-  return handleAnnotateOpenRouter(env, ctx, dataUri, cors);
+  return handleAnnotateOpenRouter(env, ctx, dataUri, cors, model);
 }
 
-async function handleAnnotateOpenRouter(env, ctx, dataUri, cors) {
+function resolveAnnotateModel(raw, env) {
+  const requested = typeof raw === 'string' ? raw.trim() : '';
+  if (requested && ALLOWED_IMAGE_MODELS.has(requested)) return requested;
+  return getModelLabel(env);
+}
+
+async function handleAnnotateOpenRouter(env, ctx, dataUri, cors, model) {
   if (env.SKETCH_JOBS) {
     const jobId = crypto.randomUUID();
     await env.SKETCH_JOBS.put(
       jobId,
-      JSON.stringify({ status: 'processing', provider: 'openrouter' }),
+      JSON.stringify({ status: 'processing', provider: 'openrouter', model }),
       { expirationTtl: JOB_TTL },
     );
-    ctx.waitUntil(runOpenRouterJob(jobId, dataUri, env));
+    ctx.waitUntil(runOpenRouterJob(jobId, dataUri, env, model));
     return json(
       {
         jobId,
         status: 'processing',
         provider: 'openrouter',
+        model,
         message: 'Poll GET /api/status?id=' + jobId,
       },
       200,
@@ -205,11 +219,12 @@ async function handleAnnotateOpenRouter(env, ctx, dataUri, cors) {
   }
 
   try {
-    const imageDataUrl = await generateWithOpenRouter(env, dataUri);
+    const imageDataUrl = await generateWithOpenRouter(env, dataUri, model);
     return json(
       {
         status: 'succeeded',
         provider: 'openrouter',
+        model,
         imageDataUrl,
       },
       200,
@@ -220,14 +235,15 @@ async function handleAnnotateOpenRouter(env, ctx, dataUri, cors) {
   }
 }
 
-async function runOpenRouterJob(jobId, dataUri, env) {
+async function runOpenRouterJob(jobId, dataUri, env, model) {
   try {
-    const imageDataUrl = await generateWithOpenRouter(env, dataUri);
+    const imageDataUrl = await generateWithOpenRouter(env, dataUri, model);
     await env.SKETCH_JOBS.put(
       jobId,
       JSON.stringify({
         status: 'succeeded',
         provider: 'openrouter',
+        model,
         imageDataUrl,
       }),
       { expirationTtl: JOB_TTL },
@@ -238,6 +254,7 @@ async function runOpenRouterJob(jobId, dataUri, env) {
       JSON.stringify({
         status: 'failed',
         provider: 'openrouter',
+        model,
         error: humanizeOpenRouterError(err.message),
         code: err.code || 'UPSTREAM_ERROR',
       }),

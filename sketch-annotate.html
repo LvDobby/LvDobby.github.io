@@ -6,83 +6,98 @@ header-img: img/post-bg-desk.jpg
 ---
 
 <link rel="stylesheet" href="{{ '/css/sketch-annotate.css' | prepend: site.baseurl }}">
-<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
 
 <script>
   window.SKETCH_CONFIG = { apiUrl: {{ site.sketch_api_url | jsonify }} };
 </script>
 
 <div class="sketch-tool">
-  <p class="post-content-preview" style="margin-bottom: 24px;">
-    上传一张日常照片，按<strong>小红书随手记录</strong>风格添加白色手绘线条与中文标注。
-    推荐选择 <strong>云端大模型改图</strong>（OpenRouter + 豆包 Seedream，在原图基础上叠加手绘注释；
-    需部署 Worker 并配置 API Key，见 <code>workers/sketch-annotate-api/README.md</code>）；未配置时可用<strong>本地生成</strong>。
-  </p>
+  <div class="sketch-hero">
+    <p class="sketch-intro">
+      上传日常照片，按<strong>小红书随手记录</strong>风格添加白色手绘线条与中文标注。
+      选择 <strong>豆包 Seedream</strong> 或 <strong>Nano Banana Pro</strong> 云端大模型直接改图。
+    </p>
+  </div>
 
-  <fieldset class="sketch-mode-group">
-    <legend class="sketch-mode-legend">生成方式</legend>
-    <label class="sketch-mode-option">
-      <input type="radio" name="sketch-mode" id="sketch-mode-cloud" value="cloud" checked>
-      云端大模型改图（豆包 Seedream 直接生成）
-    </label>
-    <label class="sketch-mode-option">
-      <input type="radio" name="sketch-mode" id="sketch-mode-local" value="local">
-      本地生成（浏览器内完成，无需 API）
-    </label>
-  </fieldset>
+  <div class="sketch-panel">
+    <fieldset class="sketch-mode-group">
+      <legend class="sketch-mode-legend">生成方式</legend>
+      <label class="sketch-mode-option">
+        <input type="radio" name="sketch-model" id="sketch-model-doubao" value="bytedance-seed/seedream-4.5" checked>
+        豆包（Seedream 4.5）
+      </label>
+      <label class="sketch-mode-option">
+        <input type="radio" name="sketch-model" id="sketch-model-nano-banana" value="google/gemini-3-pro-image-preview">
+        Nano Banana Pro（Gemini 3 Pro Image）
+      </label>
+    </fieldset>
+  </div>
 
-  <input type="file" id="sketch-file-input" accept="image/*" hidden>
+  <input type="file" id="sketch-file-input" accept="image/*" multiple hidden>
 
-  <div id="sketch-upload-zone" class="sketch-upload-zone" role="button" tabindex="0" aria-label="选择图片上传">
-    <i class="fa fa-cloud-upload"></i>
-    <p>点击或拖拽图片到此处上传</p>
-    <p class="hint">支持 JPG、PNG、WebP，最大 10MB</p>
+  <div class="sketch-panel sketch-upload-panel">
+    <div class="sketch-upload-toolbar">
+      <button type="button" id="sketch-btn-upload" class="sketch-upload-btn" aria-label="选择图片上传">
+        <span class="sketch-upload-btn-icon" aria-hidden="true">📸</span>
+        <span class="sketch-upload-btn-text">选择图片</span>
+      </button>
+
+      <div id="sketch-upload-zone" class="sketch-upload-zone" role="button" tabindex="0" aria-label="拖拽图片到此处">
+        <span class="sketch-upload-zone-icon" aria-hidden="true">📁</span>
+        <span class="sketch-upload-zone-text">拖拽到此处</span>
+      </div>
+    </div>
+
+    <p class="sketch-upload-hint">支持 JPG、PNG，单张最大 10MB · 可多选</p>
+
+    <div id="sketch-preview-list" class="sketch-preview-list" aria-live="polite"></div>
   </div>
 
   <div class="sketch-actions">
-    <button type="button" id="sketch-btn-generate" class="btn btn-primary">
-      <i class="fa fa-magic"></i> 生成手绘注释图
+    <button type="button" id="sketch-btn-generate" class="sketch-generate-btn">
+      <span aria-hidden="true">✨</span> 生成手绘注释图
     </button>
   </div>
 
   <p id="sketch-status" class="sketch-status">等待上传图片…</p>
 
   <div id="sketch-results" class="sketch-results">
-    <div class="sketch-result-block">
+    <div class="sketch-panel sketch-result-block">
       <h4>① 原始上传图片</h4>
       <div class="sketch-img-wrap">
         <img id="sketch-img-original" alt="原始上传图片">
       </div>
     </div>
 
-    <div class="sketch-result-block">
+    <div class="sketch-panel sketch-result-block">
       <h4>② AI 生成手绘注释图</h4>
       <p id="sketch-gen-mode-hint" class="sketch-gen-hint"></p>
       <div class="sketch-img-wrap">
         <img id="sketch-img-generated" alt="AI 生成手绘注释图">
       </div>
       <div class="sketch-download-row">
-        <a id="sketch-btn-download" class="btn btn-default" download="生活手绘注释图.png">
-          <i class="fa fa-download"></i> 下载图片
+        <a id="sketch-btn-download" class="sketch-download-btn" download="生活手绘注释图.png">
+          <span aria-hidden="true">⬇️</span> 下载图片
         </a>
       </div>
       <div id="sketch-elements" class="sketch-elements"></div>
     </div>
   </div>
 
-  <details class="sketch-advanced">
+  <details class="sketch-advanced sketch-panel">
     <summary>高级设置（Worker 地址 / 访问令牌）</summary>
     <div class="form-group">
       <label for="sketch-api-proxy">Cloudflare Worker API 根地址</label>
       <input type="url" id="sketch-api-proxy" class="form-control"
         placeholder="https://sketch-annotate-api.xxx.workers.dev"
         value="{{ site.sketch_api_url }}">
-      <p class="hint" style="font-size: 13px; color: #999; margin-top: 6px;">
+      <p class="sketch-field-hint">
         部署 Worker 后填入；留空则云端模式不可用。可在 _config.yml 的 <code>sketch_api_url</code> 统一配置。
       </p>
     </div>
     <div class="form-group">
-      <label for="sketch-site-token">Worker 访问令牌（可选，对应 wrangler secret ANNOTATE_TOKEN）</label>
+      <label for="sketch-site-token">Worker 访问令牌（可选）</label>
       <input type="password" id="sketch-site-token" class="form-control" placeholder="Bearer 令牌" autocomplete="off">
     </div>
   </details>

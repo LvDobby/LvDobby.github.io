@@ -11,7 +11,7 @@ const RETRY_DELAY_MS = 1500;
  * @param {string} dataUri data:image/...;base64,...
  * @returns {Promise<string>} 生成图的 data URL
  */
-export async function generateWithOpenRouter(env, dataUri) {
+export async function generateWithOpenRouter(env, dataUri, modelOverride) {
   const apiKey = getOpenRouterApiKey(env);
   if (!apiKey) {
     const err = new Error('Server missing OPENROUTER_API_KEY');
@@ -20,7 +20,7 @@ export async function generateWithOpenRouter(env, dataUri) {
     throw err;
   }
 
-  const models = getModelChain(env);
+  const models = getModelChain(env, modelOverride);
   let lastErr;
   for (const model of models) {
     try {
@@ -36,12 +36,17 @@ export async function generateWithOpenRouter(env, dataUri) {
   throw lastErr;
 }
 
-function getModelChain(env) {
+function getModelChain(env, modelOverride) {
+  if (modelOverride) return [modelOverride];
   const primary = env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
   const fallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
   const chain = [primary];
   if (fallback && fallback !== primary) chain.push(fallback);
   return chain;
+}
+
+function isGeminiImageModel(model) {
+  return model.startsWith('google/gemini-') && /image/i.test(model);
 }
 
 function isDoubaoModel(model) {
@@ -95,6 +100,10 @@ function buildRequestBody(env, dataUri, model) {
       strength: Number.isFinite(strength) ? Math.min(1, Math.max(0, strength)) : 0.12,
     };
   } else if (isDoubao) {
+    body.image_config = {
+      image_size: '2K',
+    };
+  } else if (isGeminiImageModel(model)) {
     body.image_config = {
       image_size: '2K',
     };

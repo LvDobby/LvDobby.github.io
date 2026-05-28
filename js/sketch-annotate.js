@@ -19,9 +19,12 @@
   var MAX_FILE_SIZE = 10 * 1024 * 1024;
   var MAX_SIDE = 1400;
 
-  var $fileInput, $uploadZone, $btnGenerate, $status, $results, $originalImg, $generatedImg;
-  var $btnDownload, $elementsBox, $apiProxy, $siteToken, $modeCloud, $modeLocal, $genHint;
+  var $fileInput, $uploadZone, $btnUpload, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
+  var $btnDownload, $elementsBox, $apiProxy, $siteToken, $genHint;
   var currentFile = null;
+  var uploadedFiles = [];
+  var selectedFileId = null;
+  var fileIdCounter = 0;
   var generatedDataUrl = null;
   var POLL_INTERVAL_MS = 2000;
   var POLL_MAX = 90;
@@ -357,14 +360,6 @@
     );
   }
 
-  function cloudFallbackLabel(msg) {
-    if (isBillingError(msg)) {
-      return '本地引擎（云端降级：OpenRouter/Replicate 余额不足，请充值后重试）';
-    }
-    var short = (msg || '未知错误').slice(0, 80);
-    return '本地引擎（云端降级：' + short + '）';
-  }
-
   function getAuthHeaders() {
     var token =
       ($siteToken && $siteToken.value.trim()) || sessionStorage.getItem('sketch_site_token') || '';
@@ -372,8 +367,38 @@
     return { Authorization: 'Bearer ' + token };
   }
 
-  function isCloudMode() {
-    return $modeCloud && $modeCloud.checked;
+  var MODEL_LABELS = {
+    'bytedance-seed/seedream-4.5': '豆包 Seedream 4.5',
+    'google/gemini-3-pro-image-preview': 'Nano Banana Pro',
+  };
+
+  function getSelectedModelId() {
+    var checked = document.querySelector('input[name="sketch-model"]:checked');
+    return checked ? checked.value : 'bytedance-seed/seedream-4.5';
+  }
+
+  function getSelectedModelLabel() {
+    return MODEL_LABELS[getSelectedModelId()] || getSelectedModelId();
+  }
+
+  function persistModelChoice() {
+    try {
+      sessionStorage.setItem('sketch_model', getSelectedModelId());
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function restoreModelChoice() {
+    var saved;
+    try {
+      saved = sessionStorage.getItem('sketch_model');
+    } catch (e) {
+      saved = '';
+    }
+    if (!saved || !MODEL_LABELS[saved]) return;
+    var input = document.querySelector('input[name="sketch-model"][value="' + saved + '"]');
+    if (input) input.checked = true;
   }
 
   function delay(ms) {
@@ -408,11 +433,12 @@
   }
 
   function cloudResultFromStatus(data, apiBase) {
+    var modelLabel = MODEL_LABELS[data.model] || getSelectedModelLabel();
     if (data.imageDataUrl) {
       return {
         generatedUrl: data.imageDataUrl,
-        elements: ['豆包 Seedream 云端生成'],
-        modeLabel: '云端豆包 Seedream 改图（保真原图 + 手绘注释）',
+        elements: [modelLabel + ' 云端生成'],
+        modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
       };
     }
     var imageUrl = data.imageUrl;
@@ -473,11 +499,14 @@
       return Promise.reject(new Error('未配置 Worker API 地址，请在高级设置或 _config.yml 中填写 sketch_api_url'));
     }
     var headers = getAuthHeaders();
+    var modelId = getSelectedModelId();
+    var modelLabel = getSelectedModelLabel();
 
-    setStatus('正在压缩并上传图片…', true);
+    setStatus('正在压缩并上传图片（' + modelLabel + '）…', true);
     return resizeFileForCloud(file).then(function (sizedFile) {
       var form = new FormData();
       form.append('image', sizedFile);
+      form.append('model', modelId);
       return fetch(apiBase + '/api/annotate', {
         method: 'POST',
         headers: headers,
@@ -496,7 +525,7 @@
         if (!data.jobId) {
           throw new Error(data.error || '提交失败');
         }
-        setStatus('任务已创建，等待 OpenRouter 生成…', true);
+        setStatus('任务已创建，' + modelLabel + ' 生成中…', true);
         return pollCloudJob(apiBase, data.jobId, headers);
       })
       .then(function (data) {
@@ -541,58 +570,25 @@
       setStatus('请先选择一张图片');
       return;
     }
-    $btnGenerate.disabled = true;
-    setStatus('正在生成手绘注释图…', true);
-
-    var useCloud = isCloudMode() && getApiBase();
-
-    if (isCloudMode() && !getApiBase()) {
-      setStatus('未配置 Worker 地址，已自动改用本地生成');
-      useCloud = false;
+    if (!getApiBase()) {
+      setStatus('未配置 Worker 地址，请在高级设置或 _config.yml 中填写 sketch_api_url');
+      return;
     }
 
-    var originalDataUrlPromise = fileToDataUrl(currentFile);
+    $btnGenerate.disabled = true;
+    setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
 
-    var pipeline = useCloud
-      ? originalDataUrlPromise.then(function (originalDataUrl) {
-          return generateWithCloudProxy(currentFile).then(function (payload) {
-            return {
-              originalUrl: originalDataUrl,
-              generatedUrl: payload.generatedUrl,
-              analysis: { elements: payload.elements },
-              modeLabel: payload.modeLabel,
-            };
-          });
-        })
-      .catch(function (err) {
-        var msg = err && err.message ? err.message : String(err);
-        if (isConfigError(msg)) {
-          throw new Error(
-            msg + '。请在 Worker 目录执行：npx wrangler secret put OPENROUTER_API_KEY',
-          );
-        }
-        if (isBillingError(msg)) {
-          setStatus('OpenRouter 余额不足，正在用本地引擎生成…', true);
-        } else {
-          setStatus('云端失败，正在用本地引擎生成…', true);
-        }
-        return generateLocal(currentFile).then(function (local) {
-          local.modeLabel = cloudFallbackLabel(msg);
-          if (isBillingError(msg)) {
-            local.analysis.cloudNote =
-              '云端未调用：请在 openrouter.ai/credits 充值后，再选择「云端大模型改图」。';
-          }
-          return local;
+    fileToDataUrl(currentFile)
+      .then(function (originalDataUrl) {
+        return generateWithCloudProxy(currentFile).then(function (payload) {
+          return {
+            originalUrl: originalDataUrl,
+            generatedUrl: payload.generatedUrl,
+            analysis: { elements: payload.elements },
+            modeLabel: payload.modeLabel,
+          };
         });
       })
-      : originalDataUrlPromise.then(function (originalDataUrl) {
-          return generateLocal(currentFile).then(function (local) {
-            local.originalUrl = originalDataUrl;
-            return local;
-          });
-        });
-
-    pipeline
       .then(function (payload) {
         showResults(
           payload.originalUrl,
@@ -603,7 +599,16 @@
         setStatus('生成完成，可下载保存第二张图');
       })
       .catch(function (err) {
-        setStatus('生成失败：' + (err.message || '未知错误'));
+        var msg = err && err.message ? err.message : String(err);
+        if (isConfigError(msg)) {
+          setStatus(
+            msg + '。请在 Worker 目录执行：npx wrangler secret put OPENROUTER_API_KEY',
+          );
+        } else if (isBillingError(msg)) {
+          setStatus('OpenRouter 余额不足，请前往 openrouter.ai/credits 充值后再试');
+        } else {
+          setStatus('生成失败：' + msg);
+        }
       })
       .finally(function () {
         $btnGenerate.disabled = false;
@@ -612,32 +617,130 @@
 
   function syncModeFromConfig() {
     var hasApi = !!getApiBase();
-    if ($modeCloud) {
-      $modeCloud.disabled = !hasApi;
-      if (!hasApi) $modeCloud.checked = false;
+    var modelInputs = document.querySelectorAll('input[name="sketch-model"]');
+    for (var i = 0; i < modelInputs.length; i += 1) {
+      modelInputs[i].disabled = !hasApi;
     }
-    if (!hasApi && $modeLocal) $modeLocal.checked = true;
+    if (!hasApi) {
+      setStatus('未配置 Worker 地址，请在高级设置中填写 API 根地址');
+    }
   }
 
-  function onFileSelected(file) {
-    if (!file) return;
-    if (!/^image\//.test(file.type)) {
+  function addUploadedFile(file) {
+    if (!file || !/^image\//.test(file.type)) {
       setStatus('请选择图片文件（JPG、PNG 等）');
-      return;
+      return false;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setStatus('图片不能超过 10MB');
-      return;
+      setStatus('「' + file.name + '」超过 10MB，已跳过');
+      return false;
     }
-    currentFile = file;
-    setStatus('已选择：' + file.name + '，点击「生成手绘注释图」');
-    $btnGenerate.disabled = false;
+    var id = 'f-' + ++fileIdCounter;
+    uploadedFiles.push({
+      id: id,
+      file: file,
+      url: URL.createObjectURL(file),
+      name: file.name,
+    });
+    selectUploadedFile(id);
+    renderPreviewList();
     $results.classList.remove('is-visible');
+    return true;
+  }
+
+  function addUploadedFiles(fileList) {
+    var added = 0;
+    for (var i = 0; i < fileList.length; i += 1) {
+      if (addUploadedFile(fileList[i])) added += 1;
+    }
+    if (added > 0) {
+      setStatus(
+        '已添加 ' + added + ' 张图片' +
+          (uploadedFiles.length > 1 ? '（点击缩略图切换，当前：' + currentFile.name + '）' : '：' + currentFile.name),
+      );
+    }
+  }
+
+  function selectUploadedFile(id) {
+    var item = uploadedFiles.find(function (f) {
+      return f.id === id;
+    });
+    if (!item) return;
+    selectedFileId = id;
+    currentFile = item.file;
+    $btnGenerate.disabled = false;
+    renderPreviewList();
+  }
+
+  function removeUploadedFile(id) {
+    var idx = uploadedFiles.findIndex(function (f) {
+      return f.id === id;
+    });
+    if (idx < 0) return;
+    URL.revokeObjectURL(uploadedFiles[idx].url);
+    uploadedFiles.splice(idx, 1);
+    if (selectedFileId === id) {
+      if (uploadedFiles.length) {
+        selectUploadedFile(uploadedFiles[uploadedFiles.length - 1].id);
+      } else {
+        selectedFileId = null;
+        currentFile = null;
+        $btnGenerate.disabled = true;
+        setStatus('等待上传图片…');
+      }
+    }
+    renderPreviewList();
+    if (uploadedFiles.length) {
+      setStatus('当前选中：' + currentFile.name + '（共 ' + uploadedFiles.length + ' 张）');
+    }
+    $results.classList.remove('is-visible');
+  }
+
+  function renderPreviewList() {
+    if (!$previewList) return;
+    $previewList.innerHTML = '';
+    uploadedFiles.forEach(function (item) {
+      var wrap = document.createElement('div');
+      wrap.className = 'sketch-preview-item' + (item.id === selectedFileId ? ' is-active' : '');
+      wrap.title = item.name;
+      wrap.setAttribute('role', 'button');
+      wrap.setAttribute('tabindex', '0');
+
+      var img = document.createElement('img');
+      img.src = item.url;
+      img.alt = item.name;
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sketch-preview-remove';
+      btn.setAttribute('aria-label', '删除 ' + item.name);
+      btn.textContent = '×';
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeUploadedFile(item.id);
+      });
+
+      wrap.addEventListener('click', function () {
+        selectUploadedFile(item.id);
+        setStatus('当前选中：' + item.name);
+      });
+
+      wrap.appendChild(img);
+      wrap.appendChild(btn);
+      $previewList.appendChild(wrap);
+    });
+  }
+
+  function openFilePicker() {
+    if ($fileInput) $fileInput.click();
   }
 
   function init() {
     $fileInput = $('sketch-file-input');
     $uploadZone = $('sketch-upload-zone');
+    $btnUpload = $('sketch-btn-upload');
+    $previewList = $('sketch-preview-list');
     $btnGenerate = $('sketch-btn-generate');
     $status = $('sketch-status');
     $results = $('sketch-results');
@@ -647,20 +750,41 @@
     $elementsBox = $('sketch-elements');
     $apiProxy = $('sketch-api-proxy');
     $siteToken = $('sketch-site-token');
-    $modeCloud = $('sketch-mode-cloud');
-    $modeLocal = $('sketch-mode-local');
     $genHint = $('sketch-gen-mode-hint');
 
     if (!$fileInput) return;
 
+    restoreModelChoice();
     syncModeFromConfig();
 
+    var modelInputs = document.querySelectorAll('input[name="sketch-model"]');
+    for (var mi = 0; mi < modelInputs.length; mi += 1) {
+      modelInputs[mi].addEventListener('change', persistModelChoice);
+    }
+
+    if ($btnUpload) {
+      $btnUpload.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openFilePicker();
+      });
+    }
+
     $uploadZone.addEventListener('click', function () {
-      $fileInput.click();
+      openFilePicker();
+    });
+
+    $uploadZone.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openFilePicker();
+      }
     });
 
     $fileInput.addEventListener('change', function () {
-      onFileSelected($fileInput.files[0]);
+      if ($fileInput.files && $fileInput.files.length) {
+        addUploadedFiles($fileInput.files);
+      }
+      $fileInput.value = '';
     });
 
     $uploadZone.addEventListener('dragover', function (e) {
@@ -673,7 +797,9 @@
     $uploadZone.addEventListener('drop', function (e) {
       e.preventDefault();
       $uploadZone.classList.remove('is-dragover');
-      if (e.dataTransfer.files[0]) onFileSelected(e.dataTransfer.files[0]);
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        addUploadedFiles(e.dataTransfer.files);
+      }
     });
 
     $btnGenerate.addEventListener('click', onGenerate);
