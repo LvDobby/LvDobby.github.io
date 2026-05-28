@@ -354,7 +354,9 @@
 
   function isConfigError(msg) {
     return (
-      /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker/i.test(msg || '')
+      /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker|User not found|API Key 无效|invalid.*key/i.test(
+        msg || '',
+      )
     );
   }
 

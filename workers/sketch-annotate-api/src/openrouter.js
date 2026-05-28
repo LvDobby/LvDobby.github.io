@@ -6,6 +6,9 @@ export const EDIT_PROMPT =
   '只在原图上叠加效果：' +
   SKETCH_PROMPT;
 
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 /**
  * @param {object} env
  * @param {string} dataUri data:image/...;base64,...
@@ -48,23 +51,67 @@ export async function generateWithOpenRouter(env, dataUri) {
     };
   }
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://lvdobby.github.io',
-      'X-Title': 'LvDobby Sketch Annotate',
-    },
-    body: JSON.stringify(body),
-  });
+  const payload = JSON.stringify(body);
+  let lastErr;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await callOpenRouter(apiKey, payload);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_RETRIES && isRetryable(err)) {
+        await sleep(RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
 
-  const data = await res.json();
+async function callOpenRouter(apiKey, payload) {
+  let res;
+  try {
+    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lvdobby.github.io',
+        'X-Title': 'LvDobby Sketch Annotate',
+      },
+      body: payload,
+    });
+  } catch (e) {
+    const err = new Error(e.message || 'Network error');
+    err.httpStatus = 502;
+    err.code = 'UPSTREAM_ERROR';
+    err.retryable = true;
+    throw err;
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    const err = new Error('OpenRouter 响应解析失败');
+    err.httpStatus = 502;
+    err.code = 'UPSTREAM_ERROR';
+    err.retryable = true;
+    throw err;
+  }
+
   if (!res.ok) {
     const message = extractOpenRouterError(data);
     const err = new Error(message);
     err.httpStatus = httpStatusForOpenRouter(message, res.status);
-    err.code = /credit|balance|billing|402/i.test(message) ? 'INSUFFICIENT_CREDIT' : 'OPENROUTER_UPSTREAM';
+    if (/credit|balance|billing|402/i.test(message)) {
+      err.code = 'INSUFFICIENT_CREDIT';
+    } else if (/user not found|invalid.*key|unauthorized|401/i.test(message)) {
+      err.code = 'INVALID_API_KEY';
+    } else {
+      err.code = 'OPENROUTER_UPSTREAM';
+    }
+    err.retryable = isRetryableMessage(message, res.status);
     throw err;
   }
 
@@ -76,6 +123,22 @@ export async function generateWithOpenRouter(env, dataUri) {
     throw err;
   }
   return imageUrl;
+}
+
+function isRetryable(err) {
+  if (err.retryable) return true;
+  return isRetryableMessage(err.message, err.httpStatus);
+}
+
+function isRetryableMessage(message, status) {
+  if (status === 429 || status === 502 || status === 503 || status === 504) return true;
+  return /network connection lost|provider_unavailable|timeout|timed out|overloaded|temporarily unavailable/i.test(
+    message || '',
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractImageDataUrl(data) {
@@ -124,6 +187,12 @@ export function humanizeOpenRouterError(message) {
   const m = message || '';
   if (/credit|balance|billing|insufficient/i.test(m)) {
     return 'OpenRouter 余额不足，请前往 https://openrouter.ai/credits 充值后再试';
+  }
+  if (/user not found|invalid.*key|unauthorized/i.test(m)) {
+    return 'OpenRouter API Key 无效或已过期，请在 workers/sketch-annotate-api 目录执行：npx wrangler secret put OPENROUTER_API_KEY';
+  }
+  if (/network connection lost|provider_unavailable|timeout|timed out|overloaded/i.test(m)) {
+    return 'OpenRouter 上游暂时不可用（网络中断或生成超时），请稍后重试';
   }
   return m;
 }

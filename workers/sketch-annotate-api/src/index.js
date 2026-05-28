@@ -31,6 +31,7 @@ export default {
             ok: true,
             provider: getProvider(env),
             model: getModelLabel(env),
+            async: !!env.SKETCH_JOBS,
           },
           200,
           cors,
@@ -193,7 +194,7 @@ async function runOpenRouterJob(jobId, dataUri, env) {
         status: 'failed',
         provider: 'openrouter',
         error: humanizeOpenRouterError(err.message),
-        code: err.code,
+        code: err.code || 'UPSTREAM_ERROR',
       }),
       { expirationTtl: JOB_TTL },
     );
@@ -248,6 +249,7 @@ async function handleStatus(url, env, cors) {
       }
       if (job.status === 'failed') {
         body.error = job.error || 'Generation failed';
+        if (job.code) body.code = job.code;
       }
       if (job.status === 'processing') {
         body.message = 'Still processing';
