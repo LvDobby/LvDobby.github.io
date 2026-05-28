@@ -1,0 +1,16 @@
+---
+layout: null
+---
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url={{ page.redirect | prepend: site.baseurl | prepend: site.url }}">
+  <link rel="canonical" href="{{ page.redirect | prepend: site.baseurl | prepend: site.url }}">
+  <title>{{ page.title }}</title>
+  <script>location.replace('{{ page.redirect | prepend: site.baseurl }}');</script>
+</head>
+<body>
+  <p>正在跳转到全文… <a href="{{ page.redirect | prepend: site.baseurl }}">若未自动跳转请点击这里</a></p>
+</body>
+</html>

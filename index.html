@@ -4,8 +4,13 @@ description: "Thinking will not overcome fear but action will."
 ---
 
 {% for post in paginator.posts %}
+{% if post.redirect %}
+    {% assign post_href = post.redirect | prepend: site.baseurl %}
+{% else %}
+    {% assign post_href = post.url | prepend: site.baseurl %}
+{% endif %}
 <div class="post-preview">
-    <a href="{{ post.url | prepend: site.baseurl }}">
+    <a href="{{ post_href }}">
         <h2 class="post-title">
             {{ post.title }}
         </h2>
