@@ -24,6 +24,6 @@ REPLICATE_MODEL = "black-forest-labs/flux-kontext-dev"
 # 异步任务 KV（推荐，避免 OpenRouter 生成超过 Worker 等待时间）：
 #   wrangler kv namespace create SKETCH_JOBS
 #   将返回的 id 填入下方 [[kv_namespaces]]
-# [[kv_namespaces]]
-# binding = "SKETCH_JOBS"
-# id = "your_kv_namespace_id"
+[[kv_namespaces]]
+binding = "SKETCH_JOBS"
+id = "98ad1de799934b4e9f16a5a33b7f3283"
