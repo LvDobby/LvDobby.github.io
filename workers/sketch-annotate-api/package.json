@@ -1,0 +1,14 @@
+{
+  "name": "sketch-annotate-api",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for sketch annotation (Replicate img2img)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

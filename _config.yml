@@ -9,6 +9,10 @@ url: "https://lvdobby.github.io"          # your host, for absolute URL
 baseurl: ""      # for example, '/blog' if your blog hosted on 'host/blog'
 github_repo: "https://github.com/LvDobby/LvDobby.github.io.git" # you code repository
 
+# 手绘注释图 — Cloudflare Worker（部署后填入 *.workers.dev 地址，留空则仅本地生成）
+# 例: https://sketch-annotate-api.your-subdomain.workers.dev
+sketch_api_url: ""
+
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
 sidebar-about-description: "Goals determine what you going to be!"
@@ -31,7 +35,7 @@ jianshu_username:
 # from 2016, 'pygments' is unsupported on GitHub Pages. Use 'rouge' for highlighting instead.
 permalink: pretty
 paginate: 10
-exclude: ["less","node_modules","Gruntfile.js","package.json","README.md"]
+exclude: ["less","node_modules","Gruntfile.js","package.json","README.md","workers/**/node_modules","workers/**/.wrangler"]
 anchorjs: true                          # if you want to customize anchor. check out line:181 of `post.html`
 
 

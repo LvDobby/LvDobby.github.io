@@ -4,6 +4,43 @@
   margin-bottom: 40px;
 }
 
+.sketch-mode-group {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  background: #fafafa;
+}
+
+.sketch-mode-legend {
+  font-size: 15px;
+  color: #404040;
+  border: none;
+  width: auto;
+  margin-bottom: 10px;
+  padding: 0 6px;
+}
+
+.sketch-mode-option {
+  display: block;
+  font-weight: normal;
+  font-size: 15px;
+  color: #505050;
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+.sketch-mode-option input {
+  margin-right: 8px;
+}
+
+.sketch-gen-hint {
+  font-size: 14px;
+  color: #808080;
+  margin: -8px 0 12px;
+  font-style: italic;
+}
+
 .sketch-upload-zone {
   border: 2px dashed #c0c0c0;
   border-radius: 4px;

@@ -23,9 +23,11 @@
   var MAX_SIDE = 1400;
 
   var $fileInput, $uploadZone, $btnGenerate, $status, $results, $originalImg, $generatedImg;
-  var $btnDownload, $elementsBox, $apiKey, $apiEndpoint;
+  var $btnDownload, $elementsBox, $apiProxy, $siteToken, $modeCloud, $modeLocal, $genHint;
   var currentFile = null;
   var generatedDataUrl = null;
+  var POLL_INTERVAL_MS = 2000;
+  var POLL_MAX = 90;
 
   function $(id) {
     return document.getElementById(id);
@@ -241,66 +243,6 @@
     };
   }
 
-  function fileToBase64(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        var r = reader.result;
-        resolve(r.split(',')[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function analyzeWithApi(file, apiKey, endpoint) {
-    return fileToBase64(file).then(function (b64) {
-      var mediaType = file.type || 'image/jpeg';
-      var url = endpoint || 'https://api.anthropic.com/v1/messages';
-      return fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 800,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: { type: 'base64', media_type: mediaType, data: b64 },
-                },
-                {
-                  type: 'text',
-                  text:
-                    SKETCH_PROMPT +
-                    '\n请识别画面元素（简单罗列），并生成4条中文标注文案：1条饮品感受 1条食物口感 1条环境氛围 1条收尾感悟。' +
-                    '仅返回 JSON：{"elements":["..."],"labels":[{"text":"...","x":0.1,"y":0.2},...]}' +
-                    '其中 x,y 为 0~1 相对坐标，避开画面正中心。',
-                },
-              ],
-            },
-          ],
-        }),
-      }).then(function (res) {
-        if (!res.ok) throw new Error('AI 分析请求失败');
-        return res.json();
-      }).then(function (data) {
-        var text = '';
-        if (data.content && data.content[0]) text = data.content[0].text || '';
-        var match = text.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error('AI 返回格式无效');
-        return JSON.parse(match[0]);
-      });
-    });
-  }
-
   function renderAnnotated(img, analysis) {
     var size = scaleSize(img.width, img.height);
     var w = size.w;
@@ -356,12 +298,122 @@
     }
   }
 
-  function showResults(originalUrl, generatedUrl, analysis) {
+  function getApiBase() {
+    var fromInput = $apiProxy && $apiProxy.value.trim();
+    if (fromInput) return fromInput.replace(/\/$/, '');
+    var cfg = window.SKETCH_CONFIG || {};
+    if (cfg.apiUrl) return String(cfg.apiUrl).replace(/\/$/, '');
+    return '';
+  }
+
+  function getAuthHeaders() {
+    var token =
+      ($siteToken && $siteToken.value.trim()) || sessionStorage.getItem('sketch_site_token') || '';
+    if (!token) return {};
+    return { Authorization: 'Bearer ' + token };
+  }
+
+  function isCloudMode() {
+    return $modeCloud && $modeCloud.checked;
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function pollReplicateJob(apiBase, jobId, headers) {
+    var attempts = 0;
+    function tick() {
+      attempts += 1;
+      return fetch(apiBase + '/api/status?id=' + encodeURIComponent(jobId), { headers: headers })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            if (!res.ok) throw new Error(data.error || '查询任务失败');
+            return data;
+          });
+        })
+        .then(function (data) {
+          if (data.status === 'succeeded' && data.imageUrl) return data;
+          if (data.status === 'failed') throw new Error(data.error || '云端生成失败');
+          if (attempts >= POLL_MAX) throw new Error('生成超时，请稍后重试');
+          setStatus('云端生成中…（' + attempts + '/' + POLL_MAX + '）', true);
+          return delay(POLL_INTERVAL_MS).then(tick);
+        });
+    }
+    return tick();
+  }
+
+  function generateWithCloudProxy(file) {
+    var apiBase = getApiBase();
+    if (!apiBase) {
+      return Promise.reject(new Error('未配置 Worker API 地址，请在高级设置或 _config.yml 中填写 sketch_api_url'));
+    }
+    var headers = getAuthHeaders();
+    var form = new FormData();
+    form.append('image', file);
+
+    setStatus('正在上传并提交云端任务…', true);
+    return fetch(apiBase + '/api/annotate', {
+      method: 'POST',
+      headers: headers,
+      body: form,
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || '提交失败');
+          return data;
+        });
+      })
+      .then(function (data) {
+        setStatus('任务已创建，等待大模型生成…', true);
+        return pollReplicateJob(apiBase, data.jobId, headers);
+      })
+      .then(function (data) {
+        var imageUrl = data.imageUrl;
+        var fetchUrl = data.proxyUrl ? apiBase + data.proxyUrl : imageUrl;
+        return fetch(fetchUrl, { headers: headers }).then(function (res) {
+          if (!res.ok) throw new Error('获取生成图失败');
+          return res.blob();
+        }).then(function (blob) {
+          return {
+            blob: blob,
+            objectUrl: URL.createObjectURL(blob),
+            elements: ['云端 Replicate 生成'],
+            modeLabel: '云端大模型改图（' + (window.SKETCH_CONFIG && window.SKETCH_CONFIG.apiUrl ? 'Worker' : apiBase) + '）',
+          };
+        });
+      });
+  }
+
+  function generateLocal(file) {
+    return loadImageFromFile(file).then(function (img) {
+      var analysis = defaultAnalysis();
+      var originalUrl = URL.createObjectURL(file);
+      var result = renderAnnotated(img, analysis);
+      return {
+        originalUrl: originalUrl,
+        generatedUrl: result.dataUrl,
+        analysis: result.analysis,
+        modeLabel: '本地浏览器引擎',
+      };
+    });
+  }
+
+  function showResults(originalUrl, generatedUrl, analysis, modeLabel) {
     $originalImg.src = originalUrl;
     $generatedImg.src = generatedUrl;
     generatedDataUrl = generatedUrl;
     $elementsBox.textContent =
-      '识别元素：' + (analysis.elements || []).join('、') + '（生成规则：' + SKETCH_PROMPT.slice(0, 36) + '…）';
+      '识别元素：' +
+      (analysis.elements || []).join('、') +
+      ' · 方式：' +
+      (modeLabel || '') +
+      ' · 规则：' +
+      SKETCH_PROMPT.slice(0, 36) +
+      '…';
+    if ($genHint) $genHint.textContent = '生成方式：' + (modeLabel || '');
     $results.classList.add('is-visible');
     $btnDownload.href = generatedUrl;
   }
@@ -374,29 +426,41 @@
     $btnGenerate.disabled = true;
     setStatus('正在生成手绘注释图…', true);
 
-    var apiKey = ($apiKey && $apiKey.value.trim()) || sessionStorage.getItem('sketch_api_key') || '';
-    var endpoint = ($apiEndpoint && $apiEndpoint.value.trim()) || '';
+    var originalUrl = URL.createObjectURL(currentFile);
+    var useCloud = isCloudMode() && getApiBase();
 
-    loadImageFromFile(currentFile)
-      .then(function (img) {
-        var analysisPromise = apiKey
-          ? analyzeWithApi(currentFile, apiKey, endpoint).catch(function () {
-              return defaultAnalysis();
-            })
-          : Promise.resolve(defaultAnalysis());
+    if (isCloudMode() && !getApiBase()) {
+      setStatus('未配置 Worker 地址，已自动改用本地生成');
+      useCloud = false;
+    }
 
-        return analysisPromise.then(function (analysis) {
-          if (!analysis.labels || !analysis.labels.length) {
-            analysis = defaultAnalysis();
-          }
-          if (!analysis.elements) analysis.elements = defaultAnalysis().elements;
-          var originalUrl = URL.createObjectURL(currentFile);
-          var result = renderAnnotated(img, analysis);
-          return { originalUrl: originalUrl, result: result };
-        });
-      })
+    var pipeline = useCloud
+      ? generateWithCloudProxy(currentFile)
+          .then(function (payload) {
+            return {
+              originalUrl: originalUrl,
+              generatedUrl: payload.objectUrl,
+              analysis: { elements: payload.elements },
+              modeLabel: payload.modeLabel,
+            };
+          })
+          .catch(function (err) {
+            setStatus('云端失败（' + err.message + '），正在本地生成…', true);
+            return generateLocal(currentFile).then(function (local) {
+              local.modeLabel = '本地引擎（云端降级）';
+              return local;
+            });
+          })
+      : generateLocal(currentFile);
+
+    pipeline
       .then(function (payload) {
-        showResults(payload.originalUrl, payload.result.dataUrl, payload.result.analysis);
+        showResults(
+          payload.originalUrl,
+          payload.generatedUrl,
+          payload.analysis,
+          payload.modeLabel,
+        );
         setStatus('生成完成，可下载保存第二张图');
       })
       .catch(function (err) {
@@ -405,6 +469,15 @@
       .finally(function () {
         $btnGenerate.disabled = false;
       });
+  }
+
+  function syncModeFromConfig() {
+    var hasApi = !!getApiBase();
+    if ($modeCloud) {
+      $modeCloud.disabled = !hasApi;
+      if (!hasApi) $modeCloud.checked = false;
+    }
+    if (!hasApi && $modeLocal) $modeLocal.checked = true;
   }
 
   function onFileSelected(file) {
@@ -433,10 +506,15 @@
     $generatedImg = $('sketch-img-generated');
     $btnDownload = $('sketch-btn-download');
     $elementsBox = $('sketch-elements');
-    $apiKey = $('sketch-api-key');
-    $apiEndpoint = $('sketch-api-endpoint');
+    $apiProxy = $('sketch-api-proxy');
+    $siteToken = $('sketch-site-token');
+    $modeCloud = $('sketch-mode-cloud');
+    $modeLocal = $('sketch-mode-local');
+    $genHint = $('sketch-gen-mode-hint');
 
     if (!$fileInput) return;
+
+    syncModeFromConfig();
 
     $uploadZone.addEventListener('click', function () {
       $fileInput.click();
@@ -461,12 +539,16 @@
 
     $btnGenerate.addEventListener('click', onGenerate);
 
-    if ($apiKey) {
-      var saved = sessionStorage.getItem('sketch_api_key');
-      if (saved) $apiKey.value = saved;
-      $apiKey.addEventListener('change', function () {
-        sessionStorage.setItem('sketch_api_key', $apiKey.value.trim());
+    if ($siteToken) {
+      var savedToken = sessionStorage.getItem('sketch_site_token');
+      if (savedToken) $siteToken.value = savedToken;
+      $siteToken.addEventListener('change', function () {
+        sessionStorage.setItem('sketch_site_token', $siteToken.value.trim());
       });
+    }
+
+    if ($apiProxy) {
+      $apiProxy.addEventListener('change', syncModeFromConfig);
     }
 
     $btnGenerate.disabled = true;

@@ -8,11 +8,28 @@ header-img: img/post-bg-desk.jpg
 <link rel="stylesheet" href="{{ '/css/sketch-annotate.css' | prepend: site.baseurl }}">
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
 
+<script>
+  window.SKETCH_CONFIG = { apiUrl: {{ site.sketch_api_url | jsonify }} };
+</script>
+
 <div class="sketch-tool">
   <p class="post-content-preview" style="margin-bottom: 24px;">
-    上传一张日常照片，系统将按<strong>小红书随手记录</strong>风格为你添加白色手绘线条、口语化中文标注与少量装饰。
-    生成完成后可对比原图与效果图，并一键下载。
+    上传一张日常照片，按<strong>小红书随手记录</strong>风格添加白色手绘线条与中文标注。
+    推荐选择 <strong>云端大模型改图</strong>（需先部署 Cloudflare Worker，见
+    <code>workers/sketch-annotate-api/README.md</code>）；未配置时可用<strong>本地生成</strong>。
   </p>
+
+  <fieldset class="sketch-mode-group">
+    <legend class="sketch-mode-legend">生成方式</legend>
+    <label class="sketch-mode-option">
+      <input type="radio" name="sketch-mode" id="sketch-mode-cloud" value="cloud" checked>
+      云端大模型改图（Replicate，效果更接近真实 AI 绘图）
+    </label>
+    <label class="sketch-mode-option">
+      <input type="radio" name="sketch-mode" id="sketch-mode-local" value="local">
+      本地生成（浏览器内完成，无需 API）
+    </label>
+  </fieldset>
 
   <input type="file" id="sketch-file-input" accept="image/*" hidden>
 
@@ -40,8 +57,9 @@ header-img: img/post-bg-desk.jpg
 
     <div class="sketch-result-block">
       <h4>② AI 生成手绘注释图</h4>
+      <p id="sketch-gen-mode-hint" class="sketch-gen-hint"></p>
       <div class="sketch-img-wrap">
-        <img id="sketch-img-generated" alt="AI 生成手绘注释图">
+        <img id="sketch-img-generated" alt="AI 生成手绘注释图" crossorigin="anonymous">
       </div>
       <div class="sketch-download-row">
         <a id="sketch-btn-download" class="btn btn-default" download="生活手绘注释图.png">
@@ -53,18 +71,20 @@ header-img: img/post-bg-desk.jpg
   </div>
 
   <details class="sketch-advanced">
-    <summary>高级设置（可选：接入 Claude 视觉 API 以智能识别画面元素与文案）</summary>
+    <summary>高级设置（Worker 地址 / 访问令牌）</summary>
     <div class="form-group">
-      <label for="sketch-api-key">Anthropic API Key（仅保存在本机浏览器，不会上传至本站服务器）</label>
-      <input type="password" id="sketch-api-key" class="form-control" placeholder="sk-ant-..." autocomplete="off">
+      <label for="sketch-api-proxy">Cloudflare Worker API 根地址</label>
+      <input type="url" id="sketch-api-proxy" class="form-control"
+        placeholder="https://sketch-annotate-api.xxx.workers.dev"
+        value="{{ site.sketch_api_url }}">
+      <p class="hint" style="font-size: 13px; color: #999; margin-top: 6px;">
+        部署 Worker 后填入；留空则云端模式不可用。可在 _config.yml 的 <code>sketch_api_url</code> 统一配置。
+      </p>
     </div>
     <div class="form-group">
-      <label for="sketch-api-endpoint">API 地址（留空使用官方默认）</label>
-      <input type="text" id="sketch-api-endpoint" class="form-control" placeholder="https://api.anthropic.com/v1/messages">
+      <label for="sketch-site-token">Worker 访问令牌（可选，对应 wrangler secret ANNOTATE_TOKEN）</label>
+      <input type="password" id="sketch-site-token" class="form-control" placeholder="Bearer 令牌" autocomplete="off">
     </div>
-    <p class="hint" style="font-size: 13px; color: #999;">
-      未填写 API Key 时，将使用内置规则引擎在浏览器本地生成手绘效果（无需联网调用大模型）。
-    </p>
   </details>
 </div>
 
