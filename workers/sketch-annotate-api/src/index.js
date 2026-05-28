@@ -105,18 +105,30 @@ async function handleAnnotate(request, env, cors) {
     return json({ error: 'Image exceeds 10MB limit' }, 400, cors);
   }
 
-  const dataUri = await fileToDataUri(file);
-  const prediction = await createReplicatePrediction(env, dataUri);
+  try {
+    const dataUri = await fileToDataUri(file);
+    const prediction = await createReplicatePrediction(env, dataUri);
 
-  return json(
-    {
-      jobId: prediction.id,
-      status: prediction.status,
-      message: 'Job created. Poll GET /api/status?id=' + prediction.id,
-    },
-    200,
-    cors,
-  );
+    return json(
+      {
+        jobId: prediction.id,
+        status: prediction.status,
+        message: 'Job created. Poll GET /api/status?id=' + prediction.id,
+      },
+      200,
+      cors,
+    );
+  } catch (err) {
+    const status = err.httpStatus || 502;
+    return json(
+      {
+        error: humanizeReplicateError(err.message),
+        code: err.code || 'REPLICATE_ERROR',
+      },
+      status,
+      cors,
+    );
+  }
 }
 
 async function handleStatus(url, env, cors) {
@@ -197,6 +209,31 @@ async function fileToDataUri(file) {
   return `data:${mime};base64,${b64}`;
 }
 
+function extractReplicateMessage(data) {
+  if (typeof data.detail === 'string') return data.detail;
+  if (typeof data.error === 'string') return data.error;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('; ');
+  }
+  return 'Replicate request failed';
+}
+
+function humanizeReplicateError(message) {
+  const m = message || '';
+  if (/insufficient credit/i.test(m)) {
+    return 'Replicate 账户余额不足，请前往 https://replicate.com/account/billing 充值后再使用云端生成';
+  }
+  return m;
+}
+
+function httpStatusForReplicate(message, upstreamStatus) {
+  if (/insufficient credit|billing/i.test(message)) return 402;
+  if (upstreamStatus === 401) return 401;
+  if (upstreamStatus === 422) return 422;
+  if (upstreamStatus >= 400 && upstreamStatus < 500) return upstreamStatus;
+  return 502;
+}
+
 async function createReplicatePrediction(env, dataUri) {
   const modelPath = env.REPLICATE_MODEL || 'black-forest-labs/flux-kontext-dev';
   const parts = modelPath.split('/');
@@ -225,7 +262,11 @@ async function createReplicatePrediction(env, dataUri) {
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.detail || data.error || `Replicate error ${res.status}`);
+    const message = extractReplicateMessage(data);
+    const err = new Error(message);
+    err.httpStatus = httpStatusForReplicate(message, res.status);
+    err.code = /insufficient credit/i.test(message) ? 'INSUFFICIENT_CREDIT' : 'REPLICATE_UPSTREAM';
+    throw err;
   }
   return data;
 }

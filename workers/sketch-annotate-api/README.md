@@ -24,7 +24,10 @@ npm install
 npx wrangler login
 ```
 
-## 3. 配置密钥
+## 3. 配置密钥与余额
+
+1. 在 [Replicate Billing](https://replicate.com/account/billing) **充值**（`flux-kontext-dev` 按次计费，余额不足会返回 402）
+2. 在 [API Tokens](https://replicate.com/account/api-tokens) 创建 Token，然后：
 
 ```bash
 npx wrangler secret put REPLICATE_API_TOKEN

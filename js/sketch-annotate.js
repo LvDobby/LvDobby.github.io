@@ -348,6 +348,24 @@
     return '';
   }
 
+  function isBillingError(msg) {
+    return /insufficient credit|billing|余额不足|充值/i.test(msg || '');
+  }
+
+  function isConfigError(msg) {
+    return (
+      /REPLICATE_API_TOKEN|Unauthorized|未配置 Worker/i.test(msg || '')
+    );
+  }
+
+  function cloudFallbackLabel(msg) {
+    if (isBillingError(msg)) {
+      return '本地引擎（云端降级：Replicate 余额不足，请充值后重试）';
+    }
+    var short = (msg || '未知错误').slice(0, 80);
+    return '本地引擎（云端降级：' + short + '）';
+  }
+
   function getAuthHeaders() {
     var token =
       ($siteToken && $siteToken.value.trim()) || sessionStorage.getItem('sketch_site_token') || '';
@@ -451,14 +469,13 @@
     $originalImg.src = originalUrl;
     $generatedImg.src = generatedUrl;
     generatedDataUrl = generatedUrl;
-    $elementsBox.textContent =
-      '识别元素：' +
-      (analysis.elements || []).join('、') +
-      ' · 方式：' +
-      (modeLabel || '') +
-      ' · 规则：' +
-      SKETCH_PROMPT.slice(0, 36) +
-      '…';
+    var parts = [
+      '识别元素：' + (analysis.elements || []).join('、'),
+      '方式：' + (modeLabel || ''),
+    ];
+    if (analysis.cloudNote) parts.push(analysis.cloudNote);
+    parts.push('规则：' + SKETCH_PROMPT.slice(0, 36) + '…');
+    $elementsBox.textContent = parts.join(' · ');
     if ($genHint) $genHint.textContent = '生成方式：' + (modeLabel || '');
     $results.classList.add('is-visible');
     $btnDownload.href = generatedUrl;
@@ -494,19 +511,22 @@
         })
       .catch(function (err) {
         var msg = err && err.message ? err.message : String(err);
-        var isConfig =
-          msg.indexOf('REPLICATE_API_TOKEN') >= 0 ||
-          msg.indexOf('Unauthorized') >= 0 ||
-          msg.indexOf('未配置') >= 0;
-        if (isConfig) {
+        if (isConfigError(msg)) {
           throw new Error(
-            msg +
-              '。请在 Worker 目录执行：npx wrangler secret put REPLICATE_API_TOKEN',
+            msg + '。请在 Worker 目录执行：npx wrangler secret put REPLICATE_API_TOKEN',
           );
         }
-        setStatus('云端失败（' + msg + '），正在本地生成…', true);
+        if (isBillingError(msg)) {
+          setStatus('Replicate 余额不足，正在用本地引擎生成…', true);
+        } else {
+          setStatus('云端失败，正在用本地引擎生成…', true);
+        }
         return generateLocal(currentFile).then(function (local) {
-          local.modeLabel = '本地引擎（云端降级）';
+          local.modeLabel = cloudFallbackLabel(msg);
+          if (isBillingError(msg)) {
+            local.analysis.cloudNote =
+              '云端未调用：请在 replicate.com/account/billing 充值后，再选择「云端大模型改图」。';
+          }
           return local;
         });
       })
