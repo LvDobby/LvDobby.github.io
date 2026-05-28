@@ -177,16 +177,24 @@ async function handleProxyImage(url, env, cors) {
   return new Response(upstream.body, { status: 200, headers });
 }
 
-async function fileToDataUri(file) {
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
+function bytesToBase64(bytes) {
   let binary = '';
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+    for (let j = 0; j < slice.length; j++) {
+      binary += String.fromCharCode(slice[j]);
+    }
   }
-  const b64 = btoa(binary);
-  return `data:${file.type || 'image/jpeg'};base64,${b64}`;
+  return btoa(binary);
+}
+
+async function fileToDataUri(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const b64 = bytesToBase64(bytes);
+  const mime = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+  return `data:${mime};base64,${b64}`;
 }
 
 async function createReplicatePrediction(env, dataUri) {

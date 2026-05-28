@@ -37,20 +37,62 @@
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  function loadImageFromFile(file) {
+  function loadImageFromDataUrl(dataUrl) {
     return new Promise(function (resolve, reject) {
-      var url = URL.createObjectURL(file);
       var img = new Image();
       img.onload = function () {
-        URL.revokeObjectURL(url);
+        if (!img.naturalWidth || !img.naturalHeight) {
+          reject(new Error('图片尺寸无效'));
+          return;
+        }
         resolve(img);
       };
       img.onerror = function () {
-        URL.revokeObjectURL(url);
-        reject(new Error('图片加载失败'));
+        reject(new Error('图片解码失败'));
       };
-      img.src = url;
+      img.src = dataUrl;
     });
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(reader.result);
+      };
+      reader.onerror = function () {
+        reject(new Error('无法读取图片文件'));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImageFromBitmap(file) {
+    if (typeof createImageBitmap !== 'function') {
+      return Promise.reject(new Error('浏览器不支持该图片格式'));
+    }
+    return createImageBitmap(file)
+      .then(function (bitmap) {
+        var canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        if (bitmap.close) bitmap.close();
+        return canvas.toDataURL('image/png');
+      })
+      .then(loadImageFromDataUrl);
+  }
+
+  /** 使用 data: URL 加载，避免 Service Worker 破坏 blob: URL */
+  function loadImageFromFile(file) {
+    return fileToDataUrl(file)
+      .then(loadImageFromDataUrl)
+      .catch(function () {
+        return loadImageFromBitmap(file);
+      })
+      .catch(function () {
+        throw new Error('图片加载失败，请改用 JPG 或 PNG 后重试');
+      });
   }
 
   function scaleSize(w, h) {
@@ -377,12 +419,15 @@
           if (!res.ok) throw new Error('获取生成图失败');
           return res.blob();
         }).then(function (blob) {
-          return {
-            blob: blob,
-            objectUrl: URL.createObjectURL(blob),
-            elements: ['云端 Replicate 生成'],
-            modeLabel: '云端大模型改图（' + (window.SKETCH_CONFIG && window.SKETCH_CONFIG.apiUrl ? 'Worker' : apiBase) + '）',
-          };
+          return fileToDataUrl(
+            new File([blob], 'generated.png', { type: blob.type || 'image/png' }),
+          ).then(function (dataUrl) {
+            return {
+              generatedUrl: dataUrl,
+              elements: ['云端 Replicate 生成'],
+              modeLabel: '云端大模型改图（' + (window.SKETCH_CONFIG && window.SKETCH_CONFIG.apiUrl ? 'Worker' : apiBase) + '）',
+            };
+          });
         });
       });
   }
@@ -390,14 +435,15 @@
   function generateLocal(file) {
     return loadImageFromFile(file).then(function (img) {
       var analysis = defaultAnalysis();
-      var originalUrl = URL.createObjectURL(file);
-      var result = renderAnnotated(img, analysis);
-      return {
-        originalUrl: originalUrl,
-        generatedUrl: result.dataUrl,
-        analysis: result.analysis,
-        modeLabel: '本地浏览器引擎',
-      };
+      return fileToDataUrl(file).then(function (originalDataUrl) {
+        var result = renderAnnotated(img, analysis);
+        return {
+          originalUrl: originalDataUrl,
+          generatedUrl: result.dataUrl,
+          analysis: result.analysis,
+          modeLabel: '本地浏览器引擎',
+        };
+      });
     });
   }
 
@@ -426,7 +472,6 @@
     $btnGenerate.disabled = true;
     setStatus('正在生成手绘注释图…', true);
 
-    var originalUrl = URL.createObjectURL(currentFile);
     var useCloud = isCloudMode() && getApiBase();
 
     if (isCloudMode() && !getApiBase()) {
@@ -434,24 +479,43 @@
       useCloud = false;
     }
 
+    var originalDataUrlPromise = fileToDataUrl(currentFile);
+
     var pipeline = useCloud
-      ? generateWithCloudProxy(currentFile)
-          .then(function (payload) {
+      ? originalDataUrlPromise.then(function (originalDataUrl) {
+          return generateWithCloudProxy(currentFile).then(function (payload) {
             return {
-              originalUrl: originalUrl,
-              generatedUrl: payload.objectUrl,
+              originalUrl: originalDataUrl,
+              generatedUrl: payload.generatedUrl,
               analysis: { elements: payload.elements },
               modeLabel: payload.modeLabel,
             };
-          })
-          .catch(function (err) {
-            setStatus('云端失败（' + err.message + '），正在本地生成…', true);
-            return generateLocal(currentFile).then(function (local) {
-              local.modeLabel = '本地引擎（云端降级）';
-              return local;
-            });
-          })
-      : generateLocal(currentFile);
+          });
+        })
+      .catch(function (err) {
+        var msg = err && err.message ? err.message : String(err);
+        var isConfig =
+          msg.indexOf('REPLICATE_API_TOKEN') >= 0 ||
+          msg.indexOf('Unauthorized') >= 0 ||
+          msg.indexOf('未配置') >= 0;
+        if (isConfig) {
+          throw new Error(
+            msg +
+              '。请在 Worker 目录执行：npx wrangler secret put REPLICATE_API_TOKEN',
+          );
+        }
+        setStatus('云端失败（' + msg + '），正在本地生成…', true);
+        return generateLocal(currentFile).then(function (local) {
+          local.modeLabel = '本地引擎（云端降级）';
+          return local;
+        });
+      })
+      : originalDataUrlPromise.then(function (originalDataUrl) {
+          return generateLocal(currentFile).then(function (local) {
+            local.originalUrl = originalDataUrl;
+            return local;
+          });
+        });
 
     pipeline
       .then(function (payload) {

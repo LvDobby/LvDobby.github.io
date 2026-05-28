@@ -6,7 +6,7 @@
  * Register service worker.
  * ========================================================== */
 
-const PRECACHE = 'precache-v1';
+const PRECACHE = 'precache-v2';
 const RUNTIME = 'runtime';
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
@@ -49,11 +49,24 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== PRECACHE && k !== RUNTIME).map((k) => caches.delete(k))),
+      )
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener('fetch', (event) => {
-  const { hostname } = new URL(event.request.url);
+  const requestUrl = new URL(event.request.url);
+  // blob:/data: 由页面内存生成，不可走 SW 缓存逻辑（否则会破坏手绘注释页的本地预览）
+  if (requestUrl.protocol === 'blob:' || requestUrl.protocol === 'data:') {
+    return;
+  }
+
+  const { hostname } = requestUrl;
   if (!HOSTNAME_WHITELIST.includes(hostname)) {
     return;
   }
