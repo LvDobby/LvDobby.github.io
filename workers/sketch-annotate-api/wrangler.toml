@@ -11,8 +11,8 @@ ALLOWED_ORIGINS = "https://lvdobby.github.io,http://127.0.0.1:4000,http://localh
 IMAGE_PROVIDER = "openrouter"
 # OpenRouter：图生图 / 图像编辑（客户端默认路径 /api/annotate）
 OPENROUTER_MODEL = "recraft/recraft-v3"
-# 可选备用模型（留空则仅使用 OPENROUTER_MODEL）
-# OPENROUTER_FALLBACK_MODEL = ""
+# 可选备用模型（v3 失败时自动尝试 v4）
+OPENROUTER_FALLBACK_MODEL = "recraft/recraft-v4"
 # OpenRouter：视觉分析（可选 /api/analyze，识图 + 文案）
 OPENROUTER_ANALYZE_MODEL = "google/gemini-2.5-flash"
 # Recraft 专用：越低越贴近原图（仅当 OPENROUTER_MODEL 为 recraft/* 时生效）

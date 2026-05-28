@@ -1,4 +1,4 @@
-import { SKETCH_PROMPT } from './prompt.js';
+import { SKETCH_PROMPT, RECRAFT_EDIT_PROMPT } from './prompt.js';
 
 /** 强调在原图基础上为每个元素叠加手绘注释 */
 export const EDIT_PROMPT =
@@ -44,10 +44,15 @@ export async function generateWithOpenRouter(env, dataUri) {
 
 function getModelChain(env) {
   const primary = env.OPENROUTER_MODEL || 'recraft/recraft-v3';
-  const fallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
+  const fallback = (env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v4').trim();
   const chain = [primary];
   if (fallback && fallback !== primary) chain.push(fallback);
   return chain;
+}
+
+function getEditPrompt(model) {
+  if (model.startsWith('recraft/')) return RECRAFT_EDIT_PROMPT;
+  return EDIT_PROMPT;
 }
 
 async function generateWithModel(apiKey, env, dataUri, model) {
@@ -77,7 +82,7 @@ function buildRequestBody(env, dataUri, model) {
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: dataUri } },
-          { type: 'text', text: EDIT_PROMPT },
+          { type: 'text', text: getEditPrompt(model) },
         ],
       },
     ],
@@ -111,7 +116,7 @@ function getOutputModalities(model) {
 }
 
 function isModelFallbackError(err) {
-  return /not available in your region|model not found|does not support|unsupported model|no endpoints found|output modalities/i.test(
+  return /not available in your region|model not found|does not support|unsupported model|no endpoints found|output modalities|provider returned error/i.test(
     err.message || '',
   );
 }
@@ -213,7 +218,7 @@ function isRetryable(err) {
 
 function isRetryableMessage(message, status) {
   if (status === 429 || status === 502 || status === 503 || status === 504) return true;
-  return /network connection lost|provider_unavailable|timeout|timed out|overloaded|temporarily unavailable/i.test(
+  return /network connection lost|provider_unavailable|provider returned error|timeout|timed out|overloaded|temporarily unavailable/i.test(
     message || '',
   );
 }
@@ -249,6 +254,16 @@ function extractImageDataUrl(data) {
 }
 
 function extractOpenRouterError(data) {
+  if (typeof data?.error?.message === 'string' && data.error.message !== 'Provider returned error') {
+    return data.error.message;
+  }
+  const raw = data?.error?.metadata?.raw;
+  if (typeof raw === 'string' && raw) return raw;
+  if (raw && typeof raw === 'object') {
+    if (typeof raw.message === 'string') return raw.message;
+    if (typeof raw.error === 'string') return raw.error;
+    if (typeof raw.detail === 'string') return raw.detail;
+  }
   if (typeof data?.error?.message === 'string') return data.error.message;
   if (typeof data?.error === 'string') return data.error;
   if (typeof data?.message === 'string') return data.message;
@@ -277,6 +292,9 @@ export function humanizeOpenRouterError(message) {
   }
   if (/not available in your region|region/i.test(m)) {
     return 'Gemini 图像模型在当前区域不可用，系统将自动尝试 Recraft 备用模型；若仍失败请在 wrangler.toml 设置 OPENROUTER_MODEL';
+  }
+  if (/provider returned error/i.test(m)) {
+    return 'Recraft 图像生成失败，请换一张较小的图片重试，或稍后再试';
   }
   return m;
 }

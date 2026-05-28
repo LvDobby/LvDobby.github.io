@@ -436,21 +436,45 @@
     });
   }
 
+  function resizeFileForCloud(file) {
+    return loadImageFromFile(file).then(function (img) {
+      var size = scaleSize(img.width, img.height);
+      var canvas = document.createElement('canvas');
+      canvas.width = size.w;
+      canvas.height = size.h;
+      canvas.getContext('2d').drawImage(img, 0, 0, size.w, size.h);
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(
+          function (blob) {
+            if (!blob) {
+              reject(new Error('图片压缩失败'));
+              return;
+            }
+            resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
+          },
+          'image/jpeg',
+          0.88,
+        );
+      });
+    });
+  }
+
   function generateWithCloudProxy(file) {
     var apiBase = getApiBase();
     if (!apiBase) {
       return Promise.reject(new Error('未配置 Worker API 地址，请在高级设置或 _config.yml 中填写 sketch_api_url'));
     }
     var headers = getAuthHeaders();
-    var form = new FormData();
-    form.append('image', file);
 
-    setStatus('正在上传并提交云端任务…', true);
-    return fetch(apiBase + '/api/annotate', {
-      method: 'POST',
-      headers: headers,
-      body: form,
-    })
+    setStatus('正在压缩并上传图片…', true);
+    return resizeFileForCloud(file).then(function (sizedFile) {
+      var form = new FormData();
+      form.append('image', sizedFile);
+      return fetch(apiBase + '/api/annotate', {
+        method: 'POST',
+        headers: headers,
+        body: form,
+      })
       .then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error(data.error || '提交失败');
@@ -470,6 +494,7 @@
       .then(function (data) {
         return cloudResultFromStatus(data, apiBase);
       });
+    });
   }
 
   function generateLocal(file) {
