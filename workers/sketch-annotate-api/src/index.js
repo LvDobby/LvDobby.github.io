@@ -1,6 +1,6 @@
 import { generateWithOpenRouter, humanizeOpenRouterError, verifyOpenRouterKey, getOpenRouterApiKey } from './openrouter.js';
 import { analyzeImageWithOpenRouter } from './analyze.js';
-import { fileToDataUri } from './image.js';
+import { fileToDataUri, ensureDataUri } from './image.js';
 import {
   createReplicatePrediction,
   extractOutputUrl,
@@ -11,6 +11,18 @@ import {
 const MAX_BYTES = 10 * 1024 * 1024;
 const REPLICATE_HOST_SUFFIX = 'replicate.delivery';
 const JOB_TTL = 3600;
+
+/** 允许 Worker 代理拉取的外链图床（OpenRouter / Gemini / Replicate 等） */
+const PROXY_IMAGE_HOST_SUFFIXES = [
+  REPLICATE_HOST_SUFFIX,
+  'replicate.delivery',
+  'openrouter.ai',
+  'googleusercontent.com',
+  'googleapis.com',
+  'blob.core.windows.net',
+  'oaiusercontent.com',
+  'cloudfront.net',
+];
 
 /** 前端可选模型（与 sketch-annotate.html 单选值一致） */
 const ALLOWED_IMAGE_MODELS = new Set([
@@ -203,7 +215,8 @@ function resolveAnnotateModel(raw, env) {
  */
 async function handleAnnotateOpenRouter(env, _ctx, dataUri, cors, model) {
   try {
-    const imageDataUrl = await generateWithOpenRouter(env, dataUri, model);
+    const imageRef = await generateWithOpenRouter(env, dataUri, model);
+    const imageDataUrl = await ensureDataUri(imageRef);
     return json(
       {
         status: 'succeeded',
@@ -311,7 +324,7 @@ async function handleProxyImage(url, env, cors) {
     return json({ error: 'Invalid url' }, 400, cors);
   }
 
-  if (!parsed.hostname.endsWith(REPLICATE_HOST_SUFFIX) && !parsed.hostname.includes('replicate')) {
+  if (!isProxyImageUrlAllowed(parsed)) {
     return json({ error: 'URL not allowed' }, 403, cors);
   }
 
@@ -328,6 +341,14 @@ async function handleProxyImage(url, env, cors) {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=3600',
     },
+  });
+}
+
+function isProxyImageUrlAllowed(parsed) {
+  const host = parsed.hostname.toLowerCase();
+  if (host.includes('replicate')) return true;
+  return PROXY_IMAGE_HOST_SUFFIXES.some(function (suffix) {
+    return host === suffix || host.endsWith('.' + suffix);
   });
 }
 

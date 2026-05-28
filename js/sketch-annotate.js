@@ -435,31 +435,78 @@
     return tick();
   }
 
-  function cloudResultFromStatus(data, apiBase) {
+  function cloudResultFromStatus(data, apiBase, headers) {
     var modelLabel = MODEL_LABELS[data.model] || getSelectedModelLabel();
+    var authHeaders = headers || getAuthHeaders();
+
+    function resolveRemoteImage(remoteUrl) {
+      var proxy =
+        apiBase +
+        '/api/proxy-image?url=' +
+        encodeURIComponent(remoteUrl);
+      return fetch(proxy, { headers: authHeaders })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.json().catch(function () {
+              return {};
+            }).then(function (body) {
+              throw new Error(body.error || '获取生成图失败（HTTP ' + res.status + '）');
+            });
+          }
+          return res.blob();
+        })
+        .then(function (blob) {
+          return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' }));
+        })
+        .then(function (dataUrl) {
+          return {
+            generatedUrl: dataUrl,
+            elements: [modelLabel + ' 云端生成'],
+            modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
+          };
+        });
+    }
+
     if (data.imageDataUrl) {
-      return {
+      if (/^https?:\/\//i.test(data.imageDataUrl)) {
+        return resolveRemoteImage(data.imageDataUrl);
+      }
+      return Promise.resolve({
         generatedUrl: data.imageDataUrl,
         elements: [modelLabel + ' 云端生成'],
         modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
-      };
+      });
     }
+
     var imageUrl = data.imageUrl;
+    if (!imageUrl) {
+      return Promise.reject(new Error('云端未返回图片数据'));
+    }
     var fetchUrl = data.proxyUrl ? apiBase + data.proxyUrl : imageUrl;
-    return fetch(fetchUrl).then(function (res) {
-      if (!res.ok) throw new Error('获取生成图失败');
-      return res.blob();
-    }).then(function (blob) {
-      return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' })).then(
-        function (dataUrl) {
-          return {
-            generatedUrl: dataUrl,
-            elements: ['Replicate 云端生成'],
-            modeLabel: '云端 Replicate 改图',
-          };
-        },
-      );
-    });
+    if (!/^https?:\/\//i.test(fetchUrl) && fetchUrl.indexOf('/api/proxy-image') === -1) {
+      return Promise.reject(new Error('云端返回的图片地址无效'));
+    }
+    return fetch(fetchUrl, { headers: authHeaders })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.json().catch(function () {
+            return {};
+          }).then(function (body) {
+            throw new Error(body.error || '获取生成图失败（HTTP ' + res.status + '）');
+          });
+        }
+        return res.blob();
+      })
+      .then(function (blob) {
+        return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' }));
+      })
+      .then(function (dataUrl) {
+        return {
+          generatedUrl: dataUrl,
+          elements: [modelLabel + ' 云端生成'],
+          modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
+        };
+      });
   }
 
   function resizeFileForCloud(file) {
@@ -532,17 +579,16 @@
         clearInterval(waitTicker);
       })
       .then(function (data) {
-        if (data.status === 'succeeded' && data.imageDataUrl) {
-          return cloudResultFromStatus(data, apiBase);
+        if (data.status === 'succeeded' && (data.imageDataUrl || data.imageUrl)) {
+          return cloudResultFromStatus(data, apiBase, headers);
         }
         if (!data.jobId) {
           throw new Error(data.error || '提交失败');
         }
         setStatus('任务已创建，' + modelLabel + ' 生成中…', true);
-        return pollCloudJob(apiBase, data.jobId, headers);
-      })
-      .then(function (data) {
-        return cloudResultFromStatus(data, apiBase);
+        return pollCloudJob(apiBase, data.jobId, headers).then(function (pollData) {
+          return cloudResultFromStatus(pollData, apiBase, headers);
+        });
       });
     });
   }

@@ -262,6 +262,14 @@ function extractImageDataUrl(data) {
       if (part.type === 'image_url' && part.image_url?.url) {
         return part.image_url.url;
       }
+      if (part.type === 'image_url' && part.imageUrl?.url) {
+        return part.imageUrl.url;
+      }
+      const inline = part.inline_data || part.inlineData;
+      if (inline?.data) {
+        const mime = inline.mime_type || inline.mimeType || 'image/png';
+        return `data:${mime};base64,${inline.data}`;
+      }
     }
   }
 

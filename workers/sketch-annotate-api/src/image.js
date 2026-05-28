@@ -51,3 +51,51 @@ export async function fileToDataUri(file) {
 
   return `data:${mime};base64,${bytesToBase64(bytes)}`;
 }
+
+/**
+ * OpenRouter 可能返回 data URL 或 https 临时链接；统一转为 data URL 再回传前端。
+ * @param {string} urlOrDataUri
+ * @returns {Promise<string>}
+ */
+export async function ensureDataUri(urlOrDataUri) {
+  const raw = (urlOrDataUri || '').trim();
+  if (!raw) {
+    const err = new Error('OpenRouter 未返回图片');
+    err.httpStatus = 502;
+    err.code = 'NO_IMAGE';
+    throw err;
+  }
+  if (raw.startsWith('data:image/')) return raw;
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    const err = new Error('OpenRouter 返回的图片地址无效');
+    err.httpStatus = 502;
+    err.code = 'NO_IMAGE';
+    throw err;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const err = new Error('OpenRouter 返回的图片地址无效');
+    err.httpStatus = 502;
+    err.code = 'NO_IMAGE';
+    throw err;
+  }
+
+  const res = await fetch(raw);
+  if (!res.ok) {
+    const err = new Error(`拉取生成图失败（HTTP ${res.status}）`);
+    err.httpStatus = 502;
+    err.code = 'IMAGE_FETCH_FAILED';
+    throw err;
+  }
+  const blob = await res.blob();
+  const headerMime = (res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  if (headerMime === 'image/jpeg' || headerMime === 'image/png') {
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    return `data:${headerMime};base64,${bytesToBase64(bytes)}`;
+  }
+  return fileToDataUri(blob);
+}
