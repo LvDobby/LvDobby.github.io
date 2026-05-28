@@ -43,9 +43,11 @@ export async function generateWithOpenRouter(env, dataUri) {
 }
 
 function getModelChain(env) {
-  const primary = env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-image';
-  const fallback = env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v3';
-  return [...new Set([primary, fallback].filter(Boolean))];
+  const primary = env.OPENROUTER_MODEL || 'recraft/recraft-v3';
+  const fallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
+  const chain = [primary];
+  if (fallback && fallback !== primary) chain.push(fallback);
+  return chain;
 }
 
 async function generateWithModel(apiKey, env, dataUri, model) {
@@ -79,7 +81,7 @@ function buildRequestBody(env, dataUri, model) {
         ],
       },
     ],
-    modalities: ['image', 'text'],
+    modalities: getOutputModalities(model),
   };
 
   if (isRecraft) {
@@ -96,8 +98,20 @@ function buildRequestBody(env, dataUri, model) {
   return body;
 }
 
+/** Gemini 等支持 image+text；Recraft/Flux 等仅 image 输出 */
+function getOutputModalities(model) {
+  if (
+    model.startsWith('recraft/') ||
+    model.startsWith('black-forest-labs/') ||
+    model.startsWith('sourceful/')
+  ) {
+    return ['image'];
+  }
+  return ['image', 'text'];
+}
+
 function isModelFallbackError(err) {
-  return /not available in your region|model not found|does not support|unsupported model|no endpoints found/i.test(
+  return /not available in your region|model not found|does not support|unsupported model|no endpoints found|output modalities/i.test(
     err.message || '',
   );
 }

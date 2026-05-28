@@ -31,7 +31,7 @@ export default {
           ok: true,
           provider: getProvider(env),
           model: getModelLabel(env),
-          fallbackModel: env.OPENROUTER_FALLBACK_MODEL || 'recraft/recraft-v3',
+          fallbackModel: env.OPENROUTER_FALLBACK_MODEL || null,
           analyzeModel: getAnalyzeModelLabel(env),
           mode: getProvider(env) === 'openrouter' ? 'image-gen' : getProvider(env),
           async: !!env.SKETCH_JOBS,
@@ -78,7 +78,7 @@ function getModelLabel(env) {
   if (getProvider(env) === 'replicate') {
     return env.REPLICATE_MODEL || 'black-forest-labs/flux-kontext-dev';
   }
-  return env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-image';
+  return env.OPENROUTER_MODEL || 'recraft/recraft-v3';
 }
 
 function isOriginAllowed(request, env) {
