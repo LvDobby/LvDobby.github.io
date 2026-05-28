@@ -88,10 +88,11 @@ npx wrangler secret put REPLICATE_API_TOKEN
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/health` | `{ provider, model, mode }` |
-| POST | `/api/annotate` | 上传 `image`；返回 `imageDataUrl` 或 `jobId` 需轮询（默认） |
+| POST | `/api/annotate` | 上传 `image`；返回 `imageDataUrl` / `imageFetchUrl` / `imageUrl+proxyUrl` 或 `jobId` 轮询 |
 | POST | `/api/analyze` | 上传 `image`；返回 `{ analysis }`（可选混合模式） |
 | GET | `/api/status?id=` | 查询任务 |
-| GET | `/api/proxy-image?url=` | 仅 Replicate 外链图代理 |
+| GET | `/api/result?id=` | 大图二进制结果（豆包 2K 等，避免 JSON 内嵌超大 base64） |
+| GET | `/api/proxy-image?url=` | OpenRouter / Replicate 等外链图代理 |
 
 ## 9. 本地联调
 

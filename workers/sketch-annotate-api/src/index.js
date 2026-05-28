@@ -1,6 +1,7 @@
 import { generateWithOpenRouter, humanizeOpenRouterError, verifyOpenRouterKey, getOpenRouterApiKey } from './openrouter.js';
 import { analyzeImageWithOpenRouter } from './analyze.js';
 import { fileToDataUri, ensureDataUri } from './image.js';
+import { buildAnnotateSuccessBody, handleResultImage } from './result.js';
 import {
   createReplicatePrediction,
   extractOutputUrl,
@@ -75,6 +76,10 @@ export default {
 
       if (path === '/api/proxy-image' && request.method === 'GET') {
         return await handleProxyImage(url, env, cors);
+      }
+
+      if (path === '/api/result' && request.method === 'GET') {
+        return await handleResultImage(url, env, cors);
       }
 
       return json({ error: 'Not Found' }, 404, cors);
@@ -216,17 +221,8 @@ function resolveAnnotateModel(raw, env) {
 async function handleAnnotateOpenRouter(env, _ctx, dataUri, cors, model) {
   try {
     const imageRef = await generateWithOpenRouter(env, dataUri, model);
-    const imageDataUrl = await ensureDataUri(imageRef);
-    return json(
-      {
-        status: 'succeeded',
-        provider: 'openrouter',
-        model,
-        imageDataUrl,
-      },
-      200,
-      cors,
-    );
+    const body = await buildAnnotateSuccessBody(env, imageRef, { model }, ensureDataUri);
+    return json(body, 200, cors);
   } catch (err) {
     return providerErrorResponse(err, 'openrouter', cors);
   }
@@ -275,8 +271,13 @@ async function handleStatus(url, env, cors) {
     if (raw) {
       const job = JSON.parse(raw);
       const body = { jobId, status: job.status, provider: job.provider || 'openrouter' };
-      if (job.status === 'succeeded' && job.imageDataUrl) {
-        body.imageDataUrl = job.imageDataUrl;
+      if (job.status === 'succeeded') {
+        if (job.imageFetchUrl) body.imageFetchUrl = job.imageFetchUrl;
+        else if (job.imageDataUrl) body.imageDataUrl = job.imageDataUrl;
+        else if (job.imageUrl) {
+          body.imageUrl = job.imageUrl;
+          if (job.proxyUrl) body.proxyUrl = job.proxyUrl;
+        }
       }
       if (job.status === 'failed') {
         body.error = job.error || 'Generation failed';
@@ -347,6 +348,8 @@ async function handleProxyImage(url, env, cors) {
 function isProxyImageUrlAllowed(parsed) {
   const host = parsed.hostname.toLowerCase();
   if (host.includes('replicate')) return true;
+  if (host.includes('openrouter')) return true;
+  if (/byteimg|bytecdn|volces|bytedance|seedream/i.test(host)) return true;
   return PROXY_IMAGE_HOST_SUFFIXES.some(function (suffix) {
     return host === suffix || host.endsWith('.' + suffix);
   });

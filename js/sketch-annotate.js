@@ -29,6 +29,8 @@
   var POLL_INTERVAL_MS = 3000;
   var POLL_MAX = 120;
   var GENERATE_WAIT_HINT_MS = 3000;
+  /** 内联 data URL 过大时改走 blob URL，避免移动端无法显示 */
+  var MAX_INLINE_DATA_URL_CHARS = 1500000;
 
   function $(id) {
     return document.getElementById(id);
@@ -421,6 +423,7 @@
         })
         .then(function (data) {
           if (data.status === 'succeeded') {
+            if (data.imageFetchUrl) return data;
             if (data.imageDataUrl) return data;
             if (data.imageUrl) return data;
           }
@@ -435,9 +438,42 @@
     return tick();
   }
 
+  function cloudPayloadToResult(generatedUrl, modelLabel) {
+    return {
+      generatedUrl: generatedUrl,
+      elements: [modelLabel + ' 云端生成'],
+      modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
+    };
+  }
+
+  function fetchGeneratedBlob(fetchPath, apiBase, headers) {
+    var authHeaders = headers || getAuthHeaders();
+    var fullUrl =
+      /^https?:\/\//i.test(fetchPath) ? fetchPath : apiBase + fetchPath;
+    return fetch(fullUrl, { headers: authHeaders }).then(function (res) {
+      if (!res.ok) {
+        return res
+          .json()
+          .catch(function () {
+            return {};
+          })
+          .then(function (body) {
+            throw new Error(body.error || '获取生成图失败（HTTP ' + res.status + '）');
+          });
+      }
+      return res.blob();
+    });
+  }
+
   function cloudResultFromStatus(data, apiBase, headers) {
     var modelLabel = MODEL_LABELS[data.model] || getSelectedModelLabel();
     var authHeaders = headers || getAuthHeaders();
+
+    if (data.imageFetchUrl) {
+      return fetchGeneratedBlob(data.imageFetchUrl, apiBase, authHeaders).then(function (blob) {
+        return cloudPayloadToResult(URL.createObjectURL(blob), modelLabel);
+      });
+    }
 
     function resolveRemoteImage(remoteUrl) {
       var proxy =
@@ -459,11 +495,7 @@
           return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' }));
         })
         .then(function (dataUrl) {
-          return {
-            generatedUrl: dataUrl,
-            elements: [modelLabel + ' 云端生成'],
-            modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
-          };
+          return cloudPayloadToResult(dataUrl, modelLabel);
         });
     }
 
@@ -471,11 +503,17 @@
       if (/^https?:\/\//i.test(data.imageDataUrl)) {
         return resolveRemoteImage(data.imageDataUrl);
       }
-      return Promise.resolve({
-        generatedUrl: data.imageDataUrl,
-        elements: [modelLabel + ' 云端生成'],
-        modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
-      });
+      if (data.imageDataUrl.length > MAX_INLINE_DATA_URL_CHARS) {
+        return fetch(data.imageDataUrl)
+          .then(function (res) {
+            if (!res.ok) throw new Error('生成图解码失败');
+            return res.blob();
+          })
+          .then(function (blob) {
+            return cloudPayloadToResult(URL.createObjectURL(blob), modelLabel);
+          });
+      }
+      return Promise.resolve(cloudPayloadToResult(data.imageDataUrl, modelLabel));
     }
 
     var imageUrl = data.imageUrl;
@@ -501,11 +539,7 @@
         return fileToDataUrl(new File([blob], 'generated.png', { type: blob.type || 'image/png' }));
       })
       .then(function (dataUrl) {
-        return {
-          generatedUrl: dataUrl,
-          elements: [modelLabel + ' 云端生成'],
-          modeLabel: modelLabel + ' 改图（保真原图 + 手绘注释）',
-        };
+        return cloudPayloadToResult(dataUrl, modelLabel);
       });
   }
 
@@ -570,7 +604,18 @@
         body: form,
       })
       .then(function (res) {
-        return res.json().then(function (data) {
+        return res.text().then(function (text) {
+          var data;
+          try {
+            data = text ? JSON.parse(text) : {};
+          } catch (parseErr) {
+            if (res.ok) {
+              throw new Error(
+                '服务端返回的 JSON 过大或已截断，请重新部署 Worker 后重试（豆包 2K 图建议使用最新版 API）',
+              );
+            }
+            throw new Error('提交失败（HTTP ' + res.status + '）');
+          }
           if (!res.ok) throw new Error(data.error || '提交失败');
           return data;
         });
@@ -579,7 +624,10 @@
         clearInterval(waitTicker);
       })
       .then(function (data) {
-        if (data.status === 'succeeded' && (data.imageDataUrl || data.imageUrl)) {
+        if (
+          data.status === 'succeeded' &&
+          (data.imageFetchUrl || data.imageDataUrl || data.imageUrl)
+        ) {
           return cloudResultFromStatus(data, apiBase, headers);
         }
         if (!data.jobId) {

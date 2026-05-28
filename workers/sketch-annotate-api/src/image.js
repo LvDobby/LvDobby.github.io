@@ -3,9 +3,7 @@ function bytesToBase64(bytes) {
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
     const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
-    for (let j = 0; j < slice.length; j++) {
-      binary += String.fromCharCode(slice[j]);
-    }
+    binary += String.fromCharCode.apply(null, slice);
   }
   return btoa(binary);
 }
