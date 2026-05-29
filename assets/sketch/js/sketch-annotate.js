@@ -133,12 +133,33 @@
     return '';
   }
 
+  /** 将 Worker 绝对地址改走当前 API 根（Supabase 代理），避免浏览器直连 workers.dev 证书错误 */
+  function normalizeApiAssetUrl(url, apiBase) {
+    if (!url || !apiBase) return url;
+    var value = String(url).trim();
+    if (!value) return value;
+    if (value.indexOf('/api/result') === 0 || value.indexOf('/api/proxy-image') === 0) {
+      return apiBase + value;
+    }
+    if (/^https?:\/\//i.test(value) && /workers\.dev/i.test(value)) {
+      try {
+        var parsed = new URL(value);
+        if (parsed.pathname.indexOf('/api/') === 0) {
+          return apiBase + parsed.pathname + parsed.search;
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    return value;
+  }
+
   function isBillingError(msg) {
     return /insufficient credit|billing|余额不足|充值|openrouter\.ai\/credits/i.test(msg || '');
   }
 
   function isNetworkError(msg) {
-    return /failed to fetch|networkerror|network request failed|load failed|fetch failed/i.test(
+    return /failed to fetch|networkerror|network request failed|load failed|fetch failed|err_cert|certificate|ssl|common_name_invalid/i.test(
       msg || '',
     );
   }
@@ -283,11 +304,11 @@
     var fetchCandidates = [];
 
     if (data.imageUrl && /^https?:\/\//i.test(data.imageUrl)) {
-      fetchCandidates.push(data.imageUrl);
+      fetchCandidates.push(normalizeApiAssetUrl(data.imageUrl, apiBase));
     }
     if (data.imageFetchUrl) {
       var relativeOrAbsolute = /^https?:\/\//i.test(data.imageFetchUrl)
-        ? data.imageFetchUrl
+        ? normalizeApiAssetUrl(data.imageFetchUrl, apiBase)
         : apiBase + data.imageFetchUrl;
       if (fetchCandidates.indexOf(relativeOrAbsolute) === -1) {
         fetchCandidates.push(relativeOrAbsolute);
@@ -573,9 +594,7 @@
             );
           } else if (isNetworkError(msg)) {
             setStatus(
-              '无法连接生图服务（' +
-                msg +
-                '）。请用 https://lvdobby.github.io/sketch-annotate/ 打开页面，清空高级设置里错误的 Worker 地址后重试（未扣减额度）',
+              '无法连接生图服务（证书或网络异常）。请强制刷新页面后重试；若仍失败，请清空高级设置里旧的 workers.dev 地址（未扣减额度）',
             );
           } else if (/图片加载失败|图片压缩失败|图片解码失败|图片格式/i.test(msg)) {
             setStatus(msg + '（未扣减额度，请换 JPG/PNG 后重试）');
@@ -607,6 +626,17 @@
     }
 
     startGenerate();
+  }
+
+  function syncApiBaseFromConfig() {
+    if (!$apiProxy) return;
+    var cfg = window.SKETCH_CONFIG || {};
+    var configured = cfg.apiUrl ? String(cfg.apiUrl).replace(/\/$/, '') : '';
+    if (!configured) return;
+    var current = $apiProxy.value.trim().replace(/\/$/, '');
+    if (!current || /workers\.dev/i.test(current)) {
+      $apiProxy.value = configured;
+    }
   }
 
   function syncModeFromConfig() {
@@ -765,6 +795,7 @@
     updateCurrentFileDisplay();
 
     restoreModelChoice();
+    syncApiBaseFromConfig();
     syncModeFromConfig();
 
     var modelInputs = document.querySelectorAll('input[name="sketch-model"]');

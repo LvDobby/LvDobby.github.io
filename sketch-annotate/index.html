@@ -137,10 +137,10 @@ sketch_guestbook: true
       <div class="form-group">
         <label for="sketch-api-proxy">Cloudflare Worker API 根地址</label>
         <input type="url" id="sketch-api-proxy" class="form-control"
-          placeholder="https://sketch-annotate-api.xxx.workers.dev"
+          placeholder="https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-annotate-proxy"
           value="{{ site.sketch_api_url }}">
         <p class="sketch-field-hint">
-          部署 Worker 后填入；留空则云端模式不可用。可在 _config.yml 的 <code>sketch_api_url</code> 统一配置。
+          默认走 Supabase 代理（国内可访问）；直连 Worker 请填 <code>*.workers.dev</code>。可在 _config.yml 的 <code>sketch_api_url</code> 统一配置。
         </p>
       </div>
       <div class="form-group">

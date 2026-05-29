@@ -1,0 +1,6 @@
+# Supabase 本地/部署配置（Edge Functions）
+# 部署：supabase link --project-ref ejgemmhyeeuiudhqlioc
+#        supabase functions deploy sketch-annotate-proxy --no-verify-jwt
+
+[functions.sketch-annotate-proxy]
+verify_jwt = false
