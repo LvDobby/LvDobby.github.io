@@ -19,31 +19,50 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-/* 手绘页双栏布局：主内容左贴齐，侧栏词云加宽 */
+/* 手绘页双栏布局：主内容左贴齐，侧栏留言加高右贴齐 */
 .sketch-page-layout .postlist-container {
   margin-top: 0;
   padding-right: 0;
 }
 
 .sketch-page-layout .sidebar-container {
-  padding-left: 18px;
+  padding-left: 15px;
   padding-right: 0;
+  margin-top: 0;
 }
 
 .sketch-page-layout .sketch-tool {
   margin-top: 0;
+  padding-top: 0;
   border-top-left-radius: 0;
 }
 
+.sketch-page-layout .sketch-guestbook-section > hr {
+  display: none;
+}
+
+.sketch-page-layout .sketch-guestbook-section {
+  margin-top: 0;
+}
+
+.sketch-page-layout .sketch-guestbook-section h5 {
+  margin-top: 0;
+}
+
 .sketch-page-layout .sketch-guestbook-cloud-wrap {
-  min-height: 240px;
+  min-height: 560px;
 }
 
 .sketch-page-layout .sketch-guestbook-cloud {
-  height: 240px;
+  height: 560px;
 }
 
 @media (min-width: 992px) {
+  .sketch-page-layout.container {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
   .sketch-page-layout .postlist-container {
     padding-left: 0;
   }
