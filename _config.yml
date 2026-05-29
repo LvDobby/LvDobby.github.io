@@ -18,8 +18,8 @@ sketch_api_url: "https://sketch-annotate-api.lvdobby.workers.dev"
 # GitHub OAuth：Authentication → Providers → GitHub，回调 URL 填
 #   https://lvdobby.github.io/sketch-annotate/
 # 游客登录：无需开启 Anonymous，直接在数据库创建游客记录即可
-supabase_url: ""
-supabase_anon_key: ""
+supabase_url: "https://ejgemmhyeeuiudhqlioc.supabase.co"
+supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqZ2VtbWh5ZWV1aXVkaHFsaW9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMDAxNDQsImV4cCI6MjA5NTU3NjE0NH0.o1TWtOWQK0yLjF_tCv5xK0Kl4oHVgN-08m0Iyi-5wBY"
 
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
@@ -124,5 +124,3 @@ friends: [
         href: "https://developer.apple.com/"
     }
 ]
-
-sketch_api_url: "https://sketch-annotate-api.lvdobby.workers.dev"
