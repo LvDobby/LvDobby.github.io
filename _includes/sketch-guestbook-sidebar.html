@@ -1,0 +1,27 @@
+<section class="sketch-guestbook-section" id="sketch-guestbook-section" aria-labelledby="sketch-guestbook-title">
+  <hr class="hidden-sm hidden-xs">
+  <h5 id="sketch-guestbook-title">访客留言</h5>
+  <div class="sketch-guestbook-cloud-wrap">
+    <div id="sketch-guestbook-cloud" class="sketch-guestbook-cloud" aria-live="polite"></div>
+    <button type="button" id="sketch-btn-guestbook" class="sketch-guestbook-compose-btn">我要留言</button>
+  </div>
+  <p id="sketch-guestbook-cloud-empty" class="sketch-guestbook-hint is-hidden">暂无留言，来做第一个留言的人吧</p>
+  <p id="sketch-guestbook-cloud-loading" class="sketch-guestbook-hint">加载留言…</p>
+  <button type="button" id="sketch-guestbook-toggle-details" class="sketch-guestbook-details-toggle" aria-expanded="false">
+    显示留言明细
+  </button>
+  <div id="sketch-guestbook-details" class="sketch-guestbook-details is-hidden" aria-live="polite"></div>
+</section>
+
+<div id="sketch-guestbook-modal" class="sketch-guestbook-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="sketch-guestbook-modal-title">
+  <div class="sketch-guestbook-modal-backdrop" aria-hidden="true"></div>
+  <div class="sketch-guestbook-modal-card sketch-panel">
+    <h4 id="sketch-guestbook-modal-title" class="sketch-guestbook-modal-title">写下你的留言</h4>
+    <p class="sketch-guestbook-modal-note">登录后可留言，内容将展示在词云与明细列表中（最多 500 字）。</p>
+    <textarea id="sketch-guestbook-input" class="sketch-guestbook-input" rows="5" maxlength="500" placeholder="分享你的想法、体验或建议…"></textarea>
+    <div class="sketch-guestbook-modal-actions">
+      <button type="button" id="sketch-guestbook-cancel" class="sketch-guestbook-cancel-btn">取消</button>
+      <button type="button" id="sketch-guestbook-submit" class="sketch-guestbook-submit-btn">发布留言</button>
+    </div>
+  </div>
+</div>

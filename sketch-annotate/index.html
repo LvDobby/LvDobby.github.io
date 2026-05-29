@@ -4,6 +4,7 @@ title: 生活手绘注释图
 description: 上传照片，生成小红书风格手绘标注
 header-img: img/sketch-annotate-header.jpg
 permalink: /sketch-annotate/
+sketch_guestbook: true
 ---
 
 {% assign sk_v = site.data.sketch_build.asset_version | default: '1' %}
@@ -197,3 +198,4 @@ permalink: /sketch-annotate/
 <script src="{{ '/assets/sketch/js/sketch-config.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>
 <script src="{{ '/assets/sketch/js/sketch-auth.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>
 <script src="{{ '/assets/sketch/js/sketch-annotate.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>
+<script src="{{ '/assets/sketch/js/sketch-guestbook.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>

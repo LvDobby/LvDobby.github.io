@@ -72,7 +72,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 手绘注释页脚本需及时更新，不走 SW 缓存
-  if (/\/assets\/sketch\/js\/sketch-(annotate|auth|config)\.js/i.test(requestUrl.pathname)) {
+  if (/\/assets\/sketch\/js\/sketch-(annotate|auth|config|guestbook)\.js/i.test(requestUrl.pathname)) {
     return;
   }
 

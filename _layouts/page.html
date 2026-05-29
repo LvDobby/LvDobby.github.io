@@ -32,8 +32,10 @@ layout: default
                 col-md-10 col-md-offset-1
                 sidebar-container">
 
-                <!-- Featured Tags -->
-                {% if site.featured-tags %}
+                <!-- Featured Tags / 访客留言 -->
+                {% if page.sketch_guestbook %}
+                {% include sketch-guestbook-sidebar.html %}
+                {% elsif site.featured-tags %}
                 <section>
                     <!-- no hr -->
                     <h5><a href="{{'/tags/' | prepend: site.baseurl }}">FEATURED TAGS</a></h5>
@@ -81,8 +83,10 @@ layout: default
                 col-xs-12
                 sidebar-container
             ">
-                <!-- Featured Tags -->
-                {% if site.featured-tags %}
+                <!-- Featured Tags / 访客留言 -->
+                {% if page.sketch_guestbook %}
+                {% include sketch-guestbook-sidebar.html %}
+                {% elsif site.featured-tags %}
                 <section>
                     <hr class="hidden-sm hidden-xs">
                     <h5><a href="{{'/tags/' | prepend: site.baseurl }}">FEATURED TAGS</a></h5>

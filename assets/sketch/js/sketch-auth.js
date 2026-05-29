@@ -369,6 +369,18 @@
     return currentSession.user && currentSession.user.id;
   }
 
+  function getSessionInfo() {
+    if (!currentSession) return null;
+    if (currentSession.type === 'guest') {
+      return { type: 'guest', id: currentSession.id };
+    }
+    return { type: 'github', id: currentSession.user && currentSession.user.id };
+  }
+
+  function promptLogin() {
+    showLoginModal();
+  }
+
   function hideVisitStorageKey(userId) {
     return HIDE_VISIT_STORAGE_PREFIX + userId;
   }
@@ -872,6 +884,12 @@
     onAuthChange: onAuthChange,
     isLoggedIn: isLoggedIn,
     getCurrentUser: getCurrentUser,
+    getClient: function () {
+      return supabase;
+    },
+    getProfile: getCurrentProfile,
+    getSession: getSessionInfo,
+    promptLogin: promptLogin,
     signInWithGitHub: signInWithGitHub,
     signInAsGuest: signInAsGuest,
     signOut: signOut,
