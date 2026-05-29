@@ -683,6 +683,10 @@
   }
 
   function onGenerate() {
+    if (window.SketchAuth && !window.SketchAuth.isLoggedIn()) {
+      setStatus('请先登录后再生成（GitHub 或游客身份均可）');
+      return;
+    }
     if (!currentFile) {
       setStatus('请先选择一张图片');
       return;
@@ -694,6 +698,10 @@
 
     $btnGenerate.disabled = true;
     setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
+
+    if (window.SketchAuth && window.SketchAuth.incrementDrawCount) {
+      window.SketchAuth.incrementDrawCount();
+    }
 
     fileToDataUrl(currentFile)
       .then(function (originalDataUrl) {
@@ -853,7 +861,7 @@
     if ($fileInput) $fileInput.click();
   }
 
-  function init() {
+  function initApp() {
     $fileInput = $('sketch-file-input');
     $uploadZone = $('sketch-upload-zone');
     $btnUpload = $('sketch-btn-upload');
@@ -934,6 +942,23 @@
     }
 
     $btnGenerate.disabled = true;
+  }
+
+  function init() {
+    if (window.SketchAuth && window.SketchAuth.whenReady) {
+      window.SketchAuth.whenReady().then(function () {
+        initApp();
+      });
+      if (window.SketchAuth.onAuthChange) {
+        window.SketchAuth.onAuthChange(function (loggedIn) {
+          if (loggedIn && $fileInput && $btnGenerate) {
+            $btnGenerate.disabled = !currentFile;
+          }
+        });
+      }
+      return;
+    }
+    initApp();
   }
 
   if (document.readyState === 'loading') {

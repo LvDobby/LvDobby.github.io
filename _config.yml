@@ -13,6 +13,14 @@ github_repo: "https://github.com/LvDobby/LvDobby.github.io.git" # you code repos
 # 例: https://sketch-annotate-api.your-subdomain.workers.dev
 sketch_api_url: "https://sketch-annotate-api.lvdobby.workers.dev"
 
+# Supabase — GitHub 登录与用户统计（生活手绘注释图）
+# 在 Supabase Dashboard 创建项目后填入 Project URL 与 anon public key
+# GitHub OAuth：Authentication → Providers → GitHub，回调 URL 填
+#   https://lvdobby.github.io/sketch-annotate/
+# 游客登录：无需开启 Anonymous，直接在数据库创建游客记录即可
+supabase_url: ""
+supabase_anon_key: ""
+
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
 sidebar-about-description: "Goals determine what you going to be!"
