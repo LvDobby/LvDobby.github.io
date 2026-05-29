@@ -67,7 +67,23 @@
     谢谢: 1,
   };
 
+  var KEYWORD_PALETTE = [
+    { bg: 'hsla(210, 22%, 90%, 0.98)', fg: 'hsl(210, 26%, 40%)' },
+    { bg: 'hsla(168, 20%, 89%, 0.98)', fg: 'hsl(168, 24%, 36%)' },
+    { bg: 'hsla(32, 24%, 90%, 0.98)', fg: 'hsl(32, 28%, 42%)' },
+    { bg: 'hsla(340, 18%, 91%, 0.98)', fg: 'hsl(340, 22%, 42%)' },
+    { bg: 'hsla(268, 20%, 91%, 0.98)', fg: 'hsl(268, 24%, 44%)' },
+    { bg: 'hsla(192, 18%, 89%, 0.98)', fg: 'hsl(192, 22%, 38%)' },
+    { bg: 'hsla(82, 18%, 90%, 0.98)', fg: 'hsl(82, 22%, 38%)' },
+    { bg: 'hsla(12, 22%, 91%, 0.98)', fg: 'hsl(12, 26%, 42%)' },
+    { bg: 'hsla(228, 16%, 91%, 0.98)', fg: 'hsl(228, 20%, 44%)' },
+    { bg: 'hsla(145, 18%, 89%, 0.98)', fg: 'hsl(145, 22%, 38%)' },
+    { bg: 'hsla(48, 20%, 90%, 0.98)', fg: 'hsl(48, 24%, 40%)' },
+    { bg: 'hsla(300, 16%, 91%, 0.98)', fg: 'hsl(300, 20%, 42%)' },
+  ];
+
   var guestbookCache = [];
+  var keywordColorCache = {};
   var detailsVisible = false;
 
   var $cloud, $cloudEmpty, $cloudLoading, $details, $toggleDetails;
@@ -129,68 +145,119 @@
     return { userName: '', avatarUrl: '' };
   }
 
-  function tokenizeContent(text) {
-    var counts = {};
-    var raw = String(text || '');
+  function isValidKeyword(word) {
+    word = String(word || '').trim();
+    if (word.length < 2 || word.length > 12) return false;
+    if (STOP_WORDS[word]) return false;
+    if (/^\d+$/.test(word)) return false;
+    return true;
+  }
+
+  /** 每条留言抽取一个关键词（完整词组，非单字或 n-gram 碎片） */
+  function pickKeyword(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return '留言';
+
+    var candidates = [];
     var parts = raw.split(/[\s,，。！？；;、\.!\?\(\)（）\[\]【】「」"'‘’“”\/\\|｜]+/);
 
-    function addToken(token) {
-      token = token.trim();
-      if (token.length < 2 || token.length > 12) return;
-      if (STOP_WORDS[token]) return;
-      if (/^\d+$/.test(token)) return;
-      counts[token] = (counts[token] || 0) + 1;
+    function pushCandidate(word, score) {
+      if (!isValidKeyword(word)) return;
+      candidates.push({ word: word, score: score });
     }
 
-    parts.forEach(addToken);
+    parts.forEach(function (part, partIndex) {
+      part = part.trim();
+      if (!part) return;
 
-    var cnSegments = raw.match(/[\u4e00-\u9fff]{2,8}/g) || [];
-    cnSegments.forEach(function (seg) {
-      if (seg.length <= 4) {
-        addToken(seg);
-        return;
+      if (isValidKeyword(part)) {
+        pushCandidate(part, part.length * 10 + (parts.length - partIndex));
       }
-      for (var len = 2; len <= 3; len++) {
-        for (var i = 0; i <= seg.length - len; i++) {
-          addToken(seg.slice(i, i + len));
+
+      var cnRuns = part.match(/[\u4e00-\u9fff]+/g) || [];
+      cnRuns.forEach(function (run) {
+        if (run.length <= 6) {
+          pushCandidate(run, run.length * 10 + 5);
+          return;
         }
-      }
-    });
+        for (var len = 4; len >= 2; len -= 1) {
+          var head = run.slice(0, len);
+          if (isValidKeyword(head)) {
+            pushCandidate(head, len * 10 + 3);
+            break;
+          }
+        }
+      });
 
-    return Object.keys(counts)
-      .map(function (word) {
-        return { word: word, count: counts[word] };
-      })
-      .sort(function (a, b) {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.word.length - b.word.length;
-      })
-      .slice(0, 28);
-  }
-
-  function extractKeywords(entries) {
-    var merged = {};
-    (entries || []).forEach(function (row) {
-      tokenizeContent(row.content).forEach(function (item) {
-        merged[item.word] = (merged[item.word] || 0) + item.count;
+      var enWords = part.match(/[a-zA-Z][a-zA-Z0-9_-]{2,11}/g) || [];
+      enWords.forEach(function (w) {
+        pushCandidate(w, w.length * 8);
       });
     });
-    return Object.keys(merged)
-      .map(function (word) {
-        return { word: word, count: merged[word] };
-      })
-      .sort(function (a, b) {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.word.length - b.word.length;
-      })
-      .slice(0, 28);
+
+    if (candidates.length) {
+      candidates.sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.word.length - a.word.length;
+      });
+      return candidates[0].word;
+    }
+
+    var cn = raw.match(/[\u4e00-\u9fff]{2,4}/);
+    if (cn) return cn[0];
+
+    var trimmed = raw.replace(/\s+/g, '');
+    if (trimmed.length >= 2) return trimmed.slice(0, 4);
+    return '留言';
   }
 
-  function renderKeywordCloud(keywords) {
+  function hashWord(word) {
+    var h = 0;
+    var str = String(word || '');
+    for (var i = 0; i < str.length; i += 1) {
+      h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h;
+  }
+
+  function getKeywordStyle(word) {
+    if (!keywordColorCache[word]) {
+      keywordColorCache[word] = KEYWORD_PALETTE[hashWord(word) % KEYWORD_PALETTE.length];
+    }
+    return keywordColorCache[word];
+  }
+
+  function buildEntryKeywords(entries) {
+    return (entries || []).map(function (row) {
+      var word = pickKeyword(row.content);
+      return {
+        word: word,
+        style: getKeywordStyle(word),
+        row: row,
+      };
+    });
+  }
+
+  function keywordTagHtml(word, style, extraClass) {
+    var cls = 'sketch-guestbook-kw-tag' + (extraClass ? ' ' + extraClass : '');
+    return (
+      '<span class="' +
+      cls +
+      '" style="color:' +
+      style.fg +
+      ';background:' +
+      style.bg +
+      '">' +
+      escapeHtml(word) +
+      '</span>'
+    );
+  }
+
+  function renderKeywordCloud(items) {
     if (!$cloud) return;
     $cloud.innerHTML = '';
 
-    if (!keywords.length) {
+    if (!items.length) {
       if ($cloudEmpty) {
         $cloudEmpty.textContent = guestbookCache.length
           ? '留言已收录，暂未提取到关键词'
@@ -201,19 +268,17 @@
     }
     if ($cloudEmpty) $cloudEmpty.classList.add('is-hidden');
 
-    var maxCount = keywords[0].count;
-    var total = keywords.length;
+    var total = items.length;
+    var fontSize = Math.max(10, Math.min(15, Math.round(17 - total * 0.12)));
 
-    keywords.forEach(function (item, index) {
+    items.forEach(function (item, index) {
       var rank = total > 1 ? index / (total - 1) : 0;
-      var fontSize = Math.round(22 - rank * 12);
-      var opacity = Math.max(0.45, 1 - rank * 0.45);
       var angle = ((index * 137.508) % 360) * (Math.PI / 180);
-      var radius = rank * 38 + (index % 3) * 2;
+      var radius = rank * 40 + (index % 3) * 2;
       var x = 50 + Math.cos(angle) * radius;
       var y = 50 + Math.sin(angle) * radius;
-      x = Math.max(8, Math.min(92, x));
-      y = Math.max(12, Math.min(88, y));
+      x = Math.max(10, Math.min(90, x));
+      y = Math.max(14, Math.min(86, y));
 
       var span = document.createElement('span');
       span.className = 'sketch-guestbook-kw';
@@ -221,10 +286,15 @@
       span.style.left = x + '%';
       span.style.top = y + '%';
       span.style.fontSize = fontSize + 'px';
-      span.style.opacity = String(opacity);
+      span.style.color = item.style.fg;
+      span.style.backgroundColor = item.style.bg;
       span.style.zIndex = String(total - index);
-      span.title = item.word + '（' + item.count + ' 次）';
-      if (item.count === maxCount) span.classList.add('is-top');
+      span.title =
+        (item.row.user_name || '用户') +
+        ' · ' +
+        formatDateTime(item.row.created_at) +
+        '：' +
+        item.word;
       $cloud.appendChild(span);
     });
   }
@@ -242,6 +312,8 @@
         var name = escapeHtml(row.user_name || '用户');
         var avatar = escapeHtml(normalizeAvatarUrl(row.avatar_url, row.user_name));
         var content = escapeHtml(row.content || '');
+        var keyword = pickKeyword(row.content);
+        var kwStyle = getKeywordStyle(keyword);
         var avatarHtml = avatar
           ? '<img class="sketch-guestbook-detail-avatar" src="' +
             avatar +
@@ -253,8 +325,11 @@
           '<article class="sketch-guestbook-detail-item">' +
           avatarHtml +
           '<div class="sketch-guestbook-detail-body">' +
+          '<div class="sketch-guestbook-detail-head">' +
           '<div class="sketch-guestbook-detail-name">' +
           name +
+          '</div>' +
+          keywordTagHtml(keyword, kwStyle, 'sketch-guestbook-detail-kw') +
           '</div>' +
           '<div class="sketch-guestbook-detail-time">' +
           formatDateTime(row.created_at) +
@@ -283,8 +358,9 @@
       .then(function (result) {
         if (result.error) throw result.error;
         guestbookCache = result.data || [];
+        keywordColorCache = {};
         if ($cloudLoading) $cloudLoading.classList.add('is-hidden');
-        renderKeywordCloud(extractKeywords(guestbookCache));
+        renderKeywordCloud(buildEntryKeywords(guestbookCache));
         if (detailsVisible) renderGuestbookDetails(guestbookCache);
         return guestbookCache;
       })

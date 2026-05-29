@@ -18,12 +18,16 @@
   var authReady = false;
   var statsCache = [];
   var reactionsCache = [];
+  var currentQuota = null;
+  var quotaThanksTimer = null;
 
   var $loginModal, $app, $userBar, $userAvatar, $userName, $btnLogout;
   var $btnGithubLogin, $btnGuestLogin;
   var $statsList, $statsEmpty, $statsLoading;
   var $btnLike, $btnDislike, $likeCount, $dislikeCount;
   var $reactionsList, $reactionsEmpty, $reactionsLoading;
+  var $quotaBadge, $quotaHint, $quotaHintCount;
+  var $quotaModal, $quotaStateLimit, $quotaStateThanks, $quotaPayBtn, $quotaBackdrop;
 
   function $(id) {
     return document.getElementById(id);
@@ -231,6 +235,7 @@
       avatarUrl: data.avatarUrl,
     });
     setView(true);
+    loadUserQuota();
   }
 
   function restoreGuestSession() {
@@ -333,7 +338,9 @@
       .then(function (result) {
         if (result.error) throw result.error;
         return loadUserStats().then(function () {
-          return profile;
+          return loadUserQuota().then(function () {
+            return profile;
+          });
         });
       });
   }
@@ -358,7 +365,9 @@
         avatarUrl: row.avatar_url || GUEST_AVATAR_URL,
       });
       return loadUserStats().then(function () {
-        return row;
+        return loadUserQuota().then(function () {
+          return row;
+        });
       });
     });
   }
@@ -639,6 +648,162 @@
       });
   }
 
+  function renderQuotaUI() {
+    var show = isLoggedIn() && currentQuota !== null;
+    if ($quotaBadge) {
+      $quotaBadge.classList.toggle('is-hidden', !show);
+      if (show) $quotaBadge.textContent = '剩余 ' + currentQuota + ' 次';
+    }
+    if ($quotaHint) {
+      $quotaHint.classList.toggle('is-hidden', !show);
+    }
+    if ($quotaHintCount && show) {
+      $quotaHintCount.textContent = String(currentQuota);
+    }
+  }
+
+  function loadUserQuota() {
+    if (!supabase || !currentSession) {
+      currentQuota = null;
+      renderQuotaUI();
+      return Promise.resolve(0);
+    }
+    var uid = getSessionUserId();
+    return supabase
+      .from('user_stats')
+      .select('remaining_draw_quota')
+      .eq('id', uid)
+      .single()
+      .then(function (result) {
+        if (result.error) throw result.error;
+        currentQuota =
+          typeof result.data.remaining_draw_quota === 'number'
+            ? result.data.remaining_draw_quota
+            : 1;
+        renderQuotaUI();
+        return currentQuota;
+      })
+      .catch(function (err) {
+        console.error('loadUserQuota', err);
+        currentQuota = 1;
+        renderQuotaUI();
+        return currentQuota;
+      });
+  }
+
+  function ensureQuotaLoaded() {
+    if (!isLoggedIn()) return Promise.resolve(0);
+    if (currentQuota !== null) return Promise.resolve(currentQuota);
+    return loadUserQuota();
+  }
+
+  function getRemainingQuota() {
+    return currentQuota !== null ? currentQuota : 0;
+  }
+
+  function resetQuotaModal() {
+    if (quotaThanksTimer) {
+      clearTimeout(quotaThanksTimer);
+      quotaThanksTimer = null;
+    }
+    if ($quotaStateLimit) $quotaStateLimit.classList.remove('is-hidden');
+    if ($quotaStateThanks) $quotaStateThanks.classList.add('is-hidden');
+    if ($quotaPayBtn) $quotaPayBtn.disabled = false;
+  }
+
+  function showQuotaExhaustedModal() {
+    if (!$quotaModal) return;
+    resetQuotaModal();
+    $quotaModal.classList.remove('is-hidden');
+    document.body.classList.add('sketch-modal-open');
+  }
+
+  function hideQuotaModal() {
+    if (!$quotaModal) return;
+    $quotaModal.classList.add('is-hidden');
+    document.body.classList.remove('sketch-modal-open');
+    resetQuotaModal();
+  }
+
+  function onQuotaBackdropClick() {
+    if ($quotaStateThanks && !$quotaStateThanks.classList.contains('is-hidden')) {
+      return;
+    }
+    hideQuotaModal();
+  }
+
+  function grantBonusDrawQuota() {
+    if (!supabase || !currentSession) {
+      return Promise.reject(new Error('请先登录'));
+    }
+    var rpcPromise;
+    if (currentSession.type === 'guest') {
+      rpcPromise = supabase.rpc('grant_guest_bonus_draw_quota', { p_id: currentSession.id });
+    } else {
+      rpcPromise = supabase.rpc('grant_bonus_draw_quota');
+    }
+    return rpcPromise.then(function (result) {
+      if (result.error) throw result.error;
+      var data = result.data || {};
+      if (typeof data.remaining_draw_quota === 'number') {
+        currentQuota = data.remaining_draw_quota;
+      } else {
+        currentQuota = (currentQuota || 0) + 1;
+      }
+      renderQuotaUI();
+      return currentQuota;
+    });
+  }
+
+  function onQuotaPayClick() {
+    if ($quotaPayBtn) $quotaPayBtn.disabled = true;
+    grantBonusDrawQuota()
+      .then(function () {
+        if ($quotaStateLimit) $quotaStateLimit.classList.add('is-hidden');
+        if ($quotaStateThanks) $quotaStateThanks.classList.remove('is-hidden');
+        quotaThanksTimer = setTimeout(function () {
+          hideQuotaModal();
+        }, 3000);
+      })
+      .catch(function (err) {
+        console.error('grantBonusDrawQuota', err);
+        if ($quotaPayBtn) $quotaPayBtn.disabled = false;
+        alert('额度增加失败：' + (err.message || '请稍后重试'));
+      });
+  }
+
+  function consumeDrawQuotaOnSuccess() {
+    if (!supabase || !currentSession) return Promise.resolve();
+    var rpcPromise;
+    if (currentSession.type === 'guest') {
+      rpcPromise = supabase.rpc('consume_guest_draw_quota', { p_id: currentSession.id });
+    } else {
+      rpcPromise = supabase.rpc('consume_draw_quota');
+    }
+    return rpcPromise
+      .then(function (result) {
+        if (result.error) throw result.error;
+        var data = result.data || {};
+        if (typeof data.remaining_draw_quota === 'number') {
+          currentQuota = data.remaining_draw_quota;
+        } else if (currentQuota !== null) {
+          currentQuota = Math.max(0, currentQuota - 1);
+        }
+        renderQuotaUI();
+        var uid = getSessionUserId();
+        var idx = statsCache.findIndex(function (row) {
+          return row.id === uid;
+        });
+        if (idx >= 0) {
+          statsCache[idx].draw_count = (statsCache[idx].draw_count || 0) + 1;
+          renderStatsList(statsCache);
+        }
+      })
+      .catch(function (err) {
+        console.error('consumeDrawQuotaOnSuccess', err);
+      });
+  }
+
   function incrementDrawCount() {
     if (!supabase || !currentSession) return Promise.resolve();
     var rpcPromise;
@@ -690,6 +855,7 @@
           clearVisitHiddenFlag(user.id);
           renderUserBarFromProfile(profile);
           notifyAuthChange(true);
+          return loadUserQuota();
         })
         .catch(function (err) {
           console.error('recordGitHubLogin', err);
@@ -702,6 +868,7 @@
       .then(function () {
         renderUserBarFromProfile(profileFromGitHubUser(user));
         notifyAuthChange(true);
+        return loadUserQuota();
       })
       .finally(notifyReady);
   }
@@ -752,6 +919,8 @@
     var done = function () {
       currentSession = null;
       currentProfile = null;
+      currentQuota = null;
+      renderQuotaUI();
       clearGuestSession();
       setView(false);
       notifyAuthChange(false);
@@ -803,6 +972,21 @@
     $reactionsList = $('sketch-reactions-list');
     $reactionsEmpty = $('sketch-reactions-empty');
     $reactionsLoading = $('sketch-reactions-loading');
+    $quotaBadge = $('sketch-quota-badge');
+    $quotaHint = $('sketch-quota-hint');
+    $quotaHintCount = $('sketch-quota-hint-count');
+    $quotaModal = $('sketch-quota-modal');
+    $quotaStateLimit = $('sketch-quota-state-limit');
+    $quotaStateThanks = $('sketch-quota-state-thanks');
+    $quotaPayBtn = $('sketch-quota-pay-btn');
+    $quotaBackdrop = $quotaModal ? $quotaModal.querySelector('.sketch-quota-backdrop') : null;
+
+    if ($quotaPayBtn) {
+      $quotaPayBtn.addEventListener('click', onQuotaPayClick);
+    }
+    if ($quotaBackdrop) {
+      $quotaBackdrop.addEventListener('click', onQuotaBackdropClick);
+    }
 
     if ($btnGithubLogin) {
       $btnGithubLogin.addEventListener('click', signInWithGitHub);
@@ -894,6 +1078,13 @@
     signInAsGuest: signInAsGuest,
     signOut: signOut,
     incrementDrawCount: incrementDrawCount,
+    getRemainingQuota: getRemainingQuota,
+    ensureQuotaLoaded: ensureQuotaLoaded,
+    loadUserQuota: loadUserQuota,
+    consumeDrawQuotaOnSuccess: consumeDrawQuotaOnSuccess,
+    grantBonusDrawQuota: grantBonusDrawQuota,
+    showQuotaExhaustedModal: showQuotaExhaustedModal,
+    hideQuotaModal: hideQuotaModal,
     refreshStats: loadUserStats,
     refreshReactions: loadPageReactions,
     recordPageReaction: recordPageReaction,

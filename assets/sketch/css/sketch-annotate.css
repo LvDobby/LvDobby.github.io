@@ -19,6 +19,36 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
+/* 手绘页双栏布局：主内容左贴齐，侧栏词云加宽 */
+.sketch-page-layout .postlist-container {
+  margin-top: 0;
+  padding-right: 0;
+}
+
+.sketch-page-layout .sidebar-container {
+  padding-left: 18px;
+  padding-right: 0;
+}
+
+.sketch-page-layout .sketch-tool {
+  margin-top: 0;
+  border-top-left-radius: 0;
+}
+
+.sketch-page-layout .sketch-guestbook-cloud-wrap {
+  min-height: 240px;
+}
+
+.sketch-page-layout .sketch-guestbook-cloud {
+  height: 240px;
+}
+
+@media (min-width: 992px) {
+  .sketch-page-layout .postlist-container {
+    padding-left: 0;
+  }
+}
+
 .sketch-tool {
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   margin-top: 8px;
@@ -129,49 +159,10 @@
   margin-bottom: 12px;
 }
 
-.sketch-upload-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 20px;
-  min-height: 48px;
-  border: 1.5px solid rgba(99, 102, 241, 0.35);
-  border-radius: 12px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  color: #4f46e5;
-  background: rgba(238, 242, 255, 0.65);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
-  transition:
-    transform 0.25s ease,
-    box-shadow 0.25s ease,
-    background 0.25s ease,
-    border-color 0.25s ease;
-}
-
-.sketch-upload-btn:hover {
-  transform: translateY(-1px);
-  background: rgba(224, 231, 255, 0.95);
-  border-color: #a5b4fc;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.14);
-}
-
-.sketch-upload-btn:active {
-  transform: translateY(0);
-}
-
-.sketch-upload-btn-icon {
-  display: inline-flex;
-  line-height: 0;
-  color: #6366f1;
-}
-
 .sketch-upload-zone {
   flex: 1;
   min-width: 140px;
+  width: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -225,63 +216,6 @@
 .sketch-upload-zone.is-dragover .sketch-upload-zone-icon,
 .sketch-upload-zone:hover .sketch-upload-zone-icon {
   color: #6366f1;
-}
-
-.sketch-current-file {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  margin-bottom: 12px;
-  transition: border-color 0.25s ease, background 0.25s ease;
-}
-
-.sketch-current-file:not(.is-empty) {
-  background: rgba(238, 242, 255, 0.45);
-  border-color: rgba(165, 180, 252, 0.55);
-}
-
-.sketch-current-file-icon {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.sketch-current-file-meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.sketch-current-file-name {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sketch-current-file-detail {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.sketch-current-file.is-empty .sketch-current-file-name {
-  font-weight: 500;
-  color: #64748b;
 }
 
 /* —— 缩略图预览 —— */
@@ -415,6 +349,127 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.sketch-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0369a1;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.sketch-quota-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
+}
+
+.sketch-quota-hint strong {
+  color: #0284c7;
+  font-weight: 700;
+}
+
+/* —— 额度不足弹窗 —— */
+.sketch-quota-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.sketch-quota-modal:not(.is-hidden) {
+  display: flex;
+}
+
+.sketch-quota-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.sketch-quota-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  margin: 0;
+  padding: 28px 24px 24px;
+  text-align: center;
+  animation: sketch-modal-in 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.sketch-quota-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.sketch-quota-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sketch-quota-body {
+  margin: 0 0 22px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #475569;
+}
+
+.sketch-quota-pay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  padding: 12px 28px;
+  border: none;
+  border-radius: 14px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+}
+
+.sketch-quota-pay-btn:hover:not(:disabled) {
+  transform: scale(1.04);
+  box-shadow: 0 8px 22px rgba(14, 165, 233, 0.45);
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+}
+
+.sketch-quota-pay-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
+.sketch-quota-thanks-wrap {
+  padding: 16px 0 8px;
+}
+
+.sketch-quota-thanks {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  animation: sketch-modal-in 0.24s ease;
 }
 
 .sketch-status {
@@ -1180,16 +1235,44 @@ body.sketch-modal-open {
   position: absolute;
   transform: translate(-50%, -50%);
   font-weight: 600;
-  color: #4338ca;
   line-height: 1.2;
   white-space: nowrap;
-  pointer-events: none;
   user-select: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.sketch-guestbook-kw.is-top {
-  color: #4f46e5;
-  font-weight: 700;
+.sketch-guestbook-kw:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
+  z-index: 20 !important;
+}
+
+.sketch-guestbook-kw-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.sketch-guestbook-detail-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.sketch-guestbook-detail-kw {
+  flex-shrink: 0;
 }
 
 .sketch-guestbook-compose-btn {
@@ -1438,7 +1521,6 @@ body.sketch-guestbook-modal-open {
     flex-direction: column;
   }
 
-  .sketch-upload-btn,
   .sketch-upload-zone {
     width: 100%;
     max-width: none;

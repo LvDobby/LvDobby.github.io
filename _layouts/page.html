@@ -18,7 +18,7 @@ layout: default
 </header>
 
 <!-- Main Content -->
-<div class="container">
+<div class="container{% if page.sketch_guestbook %} sketch-page-layout{% endif %}">
 	<div class="row">
         {% if site.sidebar == false %}
 <!-- NO SIDEBAR -->
@@ -67,8 +67,12 @@ layout: default
 <!-- USE SIDEBAR -->
     <!-- PostList Container -->
     		<div class="
+                {% if page.sketch_guestbook %}
+                col-lg-8 col-md-8
+                {% else %}
                 col-lg-8 col-lg-offset-1
                 col-md-8 col-md-offset-1
+                {% endif %}
                 col-sm-12
                 col-xs-12
                 postlist-container
@@ -77,8 +81,12 @@ layout: default
     		</div>
     <!-- Sidebar Container -->
             <div class="
+                {% if page.sketch_guestbook %}
+                col-lg-4 col-md-4
+                {% else %}
                 col-lg-3 col-lg-offset-0
                 col-md-3 col-md-offset-0
+                {% endif %}
                 col-sm-12
                 col-xs-12
                 sidebar-container

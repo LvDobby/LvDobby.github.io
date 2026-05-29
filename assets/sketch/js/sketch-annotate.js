@@ -12,9 +12,8 @@
   var MAX_FILE_SIZE = 10 * 1024 * 1024;
   var MAX_SIDE = 1400;
 
-  var $fileInput, $uploadZone, $btnUpload, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
+  var $fileInput, $uploadZone, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
   var $btnDownload, $elementsBox, $apiProxy, $siteToken, $genHint;
-  var $currentFileBox, $currentFileName, $currentFileDetail;
   var currentFile = null;
   var uploadedFiles = [];
   var selectedFileId = null;
@@ -92,29 +91,6 @@
     if (Math.max(w, h) <= MAX_SIDE) return { w: w, h: h };
     var s = MAX_SIDE / Math.max(w, h);
     return { w: Math.round(w * s), h: Math.round(h * s) };
-  }
-
-  function formatFileSize(bytes) {
-    if (!bytes || bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-  }
-
-  function updateCurrentFileDisplay() {
-    if (!$currentFileBox || !$currentFileName || !$currentFileDetail) return;
-    if (!currentFile) {
-      $currentFileBox.classList.add('is-empty');
-      $currentFileName.textContent = '尚未选择图片';
-      $currentFileDetail.textContent = '支持 JPG、PNG，单张最大 10MB · 可多选';
-      return;
-    }
-    $currentFileBox.classList.remove('is-empty');
-    $currentFileName.textContent = currentFile.name;
-    var detail = formatFileSize(currentFile.size);
-    if (uploadedFiles.length > 1) {
-      detail += ' · 共 ' + uploadedFiles.length + ' 张，点击缩略图切换';
-    }
-    $currentFileDetail.textContent = detail;
   }
 
   function setStatus(msg, loading) {
@@ -458,48 +434,63 @@
       return;
     }
 
-    $btnGenerate.disabled = true;
-    setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
+    var auth = window.SketchAuth;
+    var startGenerate = function () {
+      $btnGenerate.disabled = true;
+      setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
 
-    if (window.SketchAuth && window.SketchAuth.incrementDrawCount) {
-      window.SketchAuth.incrementDrawCount();
+      fileToDataUrl(currentFile)
+        .then(function (originalDataUrl) {
+          return generateWithCloudProxy(currentFile).then(function (payload) {
+            return {
+              originalUrl: originalDataUrl,
+              generatedUrl: payload.generatedUrl,
+              analysis: { elements: payload.elements },
+              modeLabel: payload.modeLabel,
+            };
+          });
+        })
+        .then(function (payload) {
+          showResults(
+            payload.originalUrl,
+            payload.generatedUrl,
+            payload.analysis,
+            payload.modeLabel,
+          );
+          setStatus('生成完成，可下载保存第二张图');
+          if (auth && auth.consumeDrawQuotaOnSuccess) {
+            auth.consumeDrawQuotaOnSuccess();
+          }
+        })
+        .catch(function (err) {
+          var msg = err && err.message ? err.message : String(err);
+          if (isConfigError(msg)) {
+            setStatus(
+              msg + '。请在 Worker 目录执行：npx wrangler secret put OPENROUTER_API_KEY',
+            );
+          } else if (isBillingError(msg)) {
+            setStatus('OpenRouter 余额不足，请前往 openrouter.ai/credits 充值后再试');
+          } else {
+            setStatus('生成失败：' + msg + '（未扣减额度，请重试）');
+          }
+        })
+        .finally(function () {
+          $btnGenerate.disabled = false;
+        });
+    };
+
+    if (auth && auth.ensureQuotaLoaded) {
+      auth.ensureQuotaLoaded().then(function (quota) {
+        if (quota <= 0) {
+          if (auth.showQuotaExhaustedModal) auth.showQuotaExhaustedModal();
+          return;
+        }
+        startGenerate();
+      });
+      return;
     }
 
-    fileToDataUrl(currentFile)
-      .then(function (originalDataUrl) {
-        return generateWithCloudProxy(currentFile).then(function (payload) {
-          return {
-            originalUrl: originalDataUrl,
-            generatedUrl: payload.generatedUrl,
-            analysis: { elements: payload.elements },
-            modeLabel: payload.modeLabel,
-          };
-        });
-      })
-      .then(function (payload) {
-        showResults(
-          payload.originalUrl,
-          payload.generatedUrl,
-          payload.analysis,
-          payload.modeLabel,
-        );
-        setStatus('生成完成，可下载保存第二张图');
-      })
-      .catch(function (err) {
-        var msg = err && err.message ? err.message : String(err);
-        if (isConfigError(msg)) {
-          setStatus(
-            msg + '。请在 Worker 目录执行：npx wrangler secret put OPENROUTER_API_KEY',
-          );
-        } else if (isBillingError(msg)) {
-          setStatus('OpenRouter 余额不足，请前往 openrouter.ai/credits 充值后再试');
-        } else {
-          setStatus('生成失败：' + msg);
-        }
-      })
-      .finally(function () {
-        $btnGenerate.disabled = false;
-      });
+    startGenerate();
   }
 
   function syncModeFromConfig() {
@@ -531,7 +522,6 @@
     });
     selectUploadedFile(id);
     renderPreviewList();
-    updateCurrentFileDisplay();
     $results.classList.remove('is-visible');
     return true;
   }
@@ -542,7 +532,6 @@
       if (addUploadedFile(fileList[i])) added += 1;
     }
     if (added > 0) {
-      updateCurrentFileDisplay();
       setStatus('已添加 ' + added + ' 张图片，当前：' + currentFile.name);
     }
   }
@@ -556,7 +545,6 @@
     currentFile = item.file;
     $btnGenerate.disabled = false;
     renderPreviewList();
-    updateCurrentFileDisplay();
   }
 
   function removeUploadedFile(id) {
@@ -574,11 +562,9 @@
         currentFile = null;
         $btnGenerate.disabled = true;
         setStatus('等待上传图片…');
-        updateCurrentFileDisplay();
       }
     }
     renderPreviewList();
-    updateCurrentFileDisplay();
     if (uploadedFiles.length) {
       setStatus('当前选中：' + currentFile.name);
     }
@@ -637,7 +623,6 @@
   function initApp() {
     $fileInput = $('sketch-file-input');
     $uploadZone = $('sketch-upload-zone');
-    $btnUpload = $('sketch-btn-upload');
     $previewList = $('sketch-preview-list');
     $btnGenerate = $('sketch-btn-generate');
     $status = $('sketch-status');
@@ -649,13 +634,8 @@
     $apiProxy = $('sketch-api-proxy');
     $siteToken = $('sketch-site-token');
     $genHint = $('sketch-gen-mode-hint');
-    $currentFileBox = $('sketch-current-file');
-    $currentFileName = $('sketch-current-file-name');
-    $currentFileDetail = $('sketch-current-file-detail');
 
-    if (!$fileInput) return;
-
-    updateCurrentFileDisplay();
+    if (!$fileInput || !$uploadZone) return;
 
     restoreModelChoice();
     syncModeFromConfig();
@@ -665,44 +645,39 @@
       modelInputs[mi].addEventListener('change', persistModelChoice);
     }
 
-    if ($btnUpload) {
-      $btnUpload.addEventListener('click', function (e) {
-        e.stopPropagation();
+    if ($uploadZone) {
+      $uploadZone.addEventListener('click', function () {
         openFilePicker();
       });
-    }
 
-    $uploadZone.addEventListener('click', function () {
-      openFilePicker();
-    });
+      $uploadZone.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openFilePicker();
+        }
+      });
 
-    $uploadZone.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
+      $uploadZone.addEventListener('dragover', function (e) {
         e.preventDefault();
-        openFilePicker();
-      }
-    });
+        $uploadZone.classList.add('is-dragover');
+      });
+      $uploadZone.addEventListener('dragleave', function () {
+        $uploadZone.classList.remove('is-dragover');
+      });
+      $uploadZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        $uploadZone.classList.remove('is-dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length) {
+          addUploadedFiles(e.dataTransfer.files);
+        }
+      });
+    }
 
     $fileInput.addEventListener('change', function () {
       if ($fileInput.files && $fileInput.files.length) {
         addUploadedFiles($fileInput.files);
       }
       $fileInput.value = '';
-    });
-
-    $uploadZone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      $uploadZone.classList.add('is-dragover');
-    });
-    $uploadZone.addEventListener('dragleave', function () {
-      $uploadZone.classList.remove('is-dragover');
-    });
-    $uploadZone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      $uploadZone.classList.remove('is-dragover');
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        addUploadedFiles(e.dataTransfer.files);
-      }
     });
 
     $btnGenerate.addEventListener('click', onGenerate);
