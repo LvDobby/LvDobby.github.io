@@ -20,9 +20,15 @@
                         <a href="{{ site.baseurl }}/">Home</a>
                     </li>
                     {% for page in site.pages %}{% if page.title %}
+                    {% assign hide_nav = false %}
+                    {% if page.url contains '/workers/' or page.url contains '/supabase/functions/' %}
+                      {% assign hide_nav = true %}
+                    {% endif %}
+                    {% unless hide_nav %}
                     <li>
                         <a href="{{ page.url | prepend: site.baseurl }}">{{ page.title }}</a>
                     </li>
+                    {% endunless %}
                     {% endif %}{% endfor %}
                 </ul>
             </div>
