@@ -5,6 +5,9 @@
   'use strict';
 
   var GUEST_STORAGE_KEY = 'sketch_guest_session';
+  var GUEST_AVATAR_URL =
+    'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png';
+  var HIDE_VISIT_STORAGE_PREFIX = 'sketch_hide_visit_';
 
   var supabase = null;
   /** @type {{ type: 'github', user: object } | { type: 'guest', id: string, userName: string, avatarUrl: string } | null} */
@@ -258,7 +261,9 @@
           '<span class="sketch-stats-meta-item"><span class="sketch-stats-label">生成</span>' +
           String(row.draw_count || 0) +
           '</span>' +
-          '</div></div></article>'
+          '</div>' +
+          buildHideVisitControl(row) +
+          '</div></article>'
         );
       })
       .join('');
@@ -316,10 +321,11 @@
       var row = result.data || {};
       if (!row.id) throw new Error('游客记录创建失败');
       saveGuestSession(row);
+      clearVisitHiddenFlag(row.id);
       activateGuestSession({
         id: row.id,
         userName: row.user_name,
-        avatarUrl: row.avatar_url,
+        avatarUrl: row.avatar_url || GUEST_AVATAR_URL,
       });
       return loadUserStats().then(function () {
         return row;
@@ -331,6 +337,104 @@
     if (!currentSession) return null;
     if (currentSession.type === 'guest') return currentSession.id;
     return currentSession.user && currentSession.user.id;
+  }
+
+  function hideVisitStorageKey(userId) {
+    return HIDE_VISIT_STORAGE_PREFIX + userId;
+  }
+
+  function isVisitHiddenThisPage(userId) {
+    if (!userId) return false;
+    try {
+      return sessionStorage.getItem(hideVisitStorageKey(userId)) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markVisitHiddenThisPage(userId) {
+    if (!userId) return;
+    try {
+      sessionStorage.setItem(hideVisitStorageKey(userId), '1');
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function clearVisitHiddenFlag(userId) {
+    if (!userId) return;
+    try {
+      sessionStorage.removeItem(hideVisitStorageKey(userId));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function buildHideVisitControl(row) {
+    var uid = getSessionUserId();
+    if (!uid || row.id !== uid) return '';
+
+    if (isVisitHiddenThisPage(uid)) {
+      return (
+        '<div class="sketch-stats-actions">' +
+        '<span class="sketch-stats-hidden-label">此次访问已隐藏</span>' +
+        '</div>'
+      );
+    }
+
+    return (
+      '<div class="sketch-stats-actions">' +
+      '<button type="button" class="sketch-stats-hide-btn" data-user-id="' +
+      escapeHtml(row.id) +
+      '">隐藏此次访问</button>' +
+      '</div>'
+    );
+  }
+
+  function hideCurrentVisit(userId) {
+    if (!supabase || !currentSession || userId !== getSessionUserId()) {
+      return Promise.reject(new Error('无法隐藏此次访问'));
+    }
+    if (isVisitHiddenThisPage(userId)) {
+      return Promise.resolve();
+    }
+
+    var rpcPromise;
+    if (currentSession.type === 'guest') {
+      rpcPromise = supabase.rpc('hide_guest_login', { p_id: userId });
+    } else {
+      rpcPromise = supabase.rpc('hide_current_login');
+    }
+
+    return rpcPromise.then(function (result) {
+      if (result.error) throw result.error;
+      markVisitHiddenThisPage(userId);
+      var idx = statsCache.findIndex(function (row) {
+        return row.id === userId;
+      });
+      if (idx >= 0) {
+        statsCache[idx].login_count = Math.max(0, (statsCache[idx].login_count || 0) - 1);
+        renderStatsList(statsCache);
+      }
+      return loadUserStats();
+    });
+  }
+
+  function onStatsListClick(e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.sketch-stats-hide-btn') : null;
+    if (!btn || btn.disabled) return;
+    var userId = btn.getAttribute('data-user-id');
+    if (!userId || userId !== getSessionUserId()) return;
+
+    btn.disabled = true;
+    btn.textContent = '处理中…';
+
+    hideCurrentVisit(userId).catch(function (err) {
+      console.error('hideCurrentVisit', err);
+      btn.disabled = false;
+      btn.textContent = '隐藏此次访问';
+      alert('隐藏失败：' + (err.message || '请稍后重试'));
+    });
   }
 
   function incrementDrawCount() {
@@ -381,6 +485,7 @@
     if (eventType === 'SIGNED_IN') {
       return recordGitHubLogin(user)
         .then(function (profile) {
+          clearVisitHiddenFlag(user.id);
           renderUserBarFromProfile(profile);
           notifyAuthChange(true);
         })
@@ -498,6 +603,9 @@
     }
     if ($btnLogout) {
       $btnLogout.addEventListener('click', signOut);
+    }
+    if ($statsList) {
+      $statsList.addEventListener('click', onStatsListClick);
     }
   }
 

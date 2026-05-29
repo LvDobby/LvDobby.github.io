@@ -31,7 +31,7 @@ BEGIN
   FROM public.user_stats;
 
   guest_name := '游客' || lpad(next_num::text, 2, '0');
-  guest_avatar := 'https://github.com/identicons/' || guest_name || '.png';
+  guest_avatar := 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png';
 
   INSERT INTO public.user_stats (id, user_name, avatar_url, first_login, last_login, login_count, draw_count, is_guest)
   VALUES (new_id, guest_name, guest_avatar, now(), now(), 1, 0, true);

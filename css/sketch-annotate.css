@@ -79,6 +79,23 @@
   height: 16px;
 }
 
+/* —— 区块标题（与结果区 h4 一致） —— */
+.sketch-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 14px;
+  padding-left: 12px;
+  border-left: 3px solid #6366f1;
+}
+
+.sketch-section-title--inline {
+  margin: 0;
+  display: inline;
+  padding-left: 0;
+  border-left: none;
+}
+
 /* —— 上传工具栏 —— */
 .sketch-upload-panel {
   padding: 18px 20px 16px;
@@ -88,7 +105,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .sketch-upload-btn {
@@ -96,56 +114,53 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 22px;
-  min-height: 52px;
-  border: none;
-  border-radius: 14px;
+  padding: 0 20px;
+  min-height: 48px;
+  border: 1.5px solid rgba(99, 102, 241, 0.35);
+  border-radius: 12px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 52%, #a855f7 100%);
-  box-shadow:
-    0 4px 14px rgba(99, 102, 241, 0.35),
-    0 1px 2px rgba(79, 70, 229, 0.2);
+  color: #4f46e5;
+  background: rgba(238, 242, 255, 0.65);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
   transition:
-    transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-    box-shadow 0.28s ease,
-    filter 0.28s ease;
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease,
+    border-color 0.25s ease;
 }
 
 .sketch-upload-btn:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 8px 22px rgba(99, 102, 241, 0.42),
-    0 2px 6px rgba(79, 70, 229, 0.18);
-  filter: brightness(1.03);
+  transform: translateY(-1px);
+  background: rgba(224, 231, 255, 0.95);
+  border-color: #a5b4fc;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.14);
 }
 
 .sketch-upload-btn:active {
   transform: translateY(0);
-  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
 }
 
 .sketch-upload-btn-icon {
-  font-size: 18px;
-  line-height: 1;
+  display: inline-flex;
+  line-height: 0;
+  color: #6366f1;
 }
 
 .sketch-upload-zone {
   flex: 1;
   min-width: 140px;
-  max-width: 280px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 0 18px;
-  min-height: 52px;
+  min-height: 48px;
   border: 1.5px dashed #c7cdd8;
-  border-radius: 14px;
-  background: rgba(248, 250, 252, 0.9);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
   cursor: pointer;
   transition:
     border-color 0.25s ease,
@@ -158,20 +173,21 @@
 .sketch-upload-zone:hover,
 .sketch-upload-zone:focus-visible {
   border-color: #a5b4fc;
-  background: rgba(238, 242, 255, 0.95);
+  background: rgba(238, 242, 255, 0.55);
 }
 
 .sketch-upload-zone.is-dragover {
   border-color: #6366f1;
   border-style: solid;
   background: rgba(224, 231, 255, 0.95);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  transform: scale(1.01);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .sketch-upload-zone-icon {
-  font-size: 16px;
-  line-height: 1;
+  display: inline-flex;
+  line-height: 0;
+  color: #94a3b8;
+  transition: color 0.25s ease;
 }
 
 .sketch-upload-zone-text {
@@ -186,23 +202,75 @@
   color: #4338ca;
 }
 
-.sketch-upload-hint {
-  margin: 12px 0 0;
+.sketch-upload-zone.is-dragover .sketch-upload-zone-icon,
+.sketch-upload-zone:hover .sketch-upload-zone-icon {
+  color: #6366f1;
+}
+
+.sketch-current-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  margin-bottom: 12px;
+  transition: border-color 0.25s ease, background 0.25s ease;
+}
+
+.sketch-current-file:not(.is-empty) {
+  background: rgba(238, 242, 255, 0.45);
+  border-color: rgba(165, 180, 252, 0.55);
+}
+
+.sketch-current-file-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.sketch-current-file-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.sketch-current-file-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sketch-current-file-detail {
+  display: block;
+  margin-top: 2px;
   font-size: 12px;
   color: #94a3b8;
+}
+
+.sketch-current-file.is-empty .sketch-current-file-name {
+  font-weight: 500;
+  color: #64748b;
 }
 
 /* —— 缩略图预览 —— */
 .sketch-preview-list {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-top: 16px;
-  padding: 4px 2px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
+  margin-top: 4px;
+  padding: 2px 0 4px;
 }
 
 .sketch-preview-list:empty {
@@ -211,43 +279,60 @@
   padding: 0;
 }
 
-.sketch-preview-item {
-  position: relative;
+.sketch-preview-card {
   flex: 0 0 auto;
-  scroll-snap-align: start;
-  width: 88px;
-  height: 88px;
-  border-radius: 12px;
-  overflow: hidden;
+  width: 100px;
   cursor: pointer;
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.06),
-    0 4px 12px rgba(15, 23, 42, 0.08);
-  transition:
-    transform 0.25s ease,
-    box-shadow 0.25s ease,
-    outline 0.2s ease;
+  transition: transform 0.25s ease;
 }
 
-.sketch-preview-item:hover {
+.sketch-preview-card:hover {
   transform: translateY(-2px);
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.08),
-    0 8px 18px rgba(15, 23, 42, 0.12);
 }
 
-.sketch-preview-item.is-active {
+.sketch-preview-card.is-active .sketch-preview-thumb {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.22);
 }
 
-.sketch-preview-item img {
+.sketch-preview-thumb {
+  position: relative;
+  width: 100px;
+  height: 76px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f1f5f9;
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.25s ease, outline 0.2s ease;
+}
+
+.sketch-preview-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
   pointer-events: none;
+}
+
+.sketch-preview-name {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+
+.sketch-preview-card.is-active .sketch-preview-name {
+  color: #4f46e5;
+  font-weight: 600;
 }
 
 .sketch-preview-remove {
@@ -682,10 +767,61 @@ body.sketch-modal-open {
   flex-shrink: 0;
 }
 
-/* —— 用户统计面板 —— */
+/* —— 用户统计面板（可折叠） —— */
 .sketch-stats-section {
   margin-top: 8px;
   margin-bottom: 0;
+  padding: 16px 22px;
+}
+
+.sketch-collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  outline: none;
+  user-select: none;
+}
+
+.sketch-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sketch-collapsible > summary::after {
+  content: '';
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: rotate(45deg);
+  transition: transform 0.25s ease, border-color 0.25s ease;
+  margin-right: 4px;
+}
+
+.sketch-collapsible[open] > summary::after {
+  transform: rotate(-135deg);
+  margin-top: 4px;
+}
+
+.sketch-collapsible > summary:hover .sketch-stats-summary-hint {
+  color: #64748b;
+}
+
+.sketch-stats-summary-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 400;
+  transition: color 0.2s ease;
+}
+
+.sketch-stats-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .sketch-stats-title {
@@ -720,7 +856,7 @@ body.sketch-modal-open {
 
 .sketch-stats-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   padding: 12px 14px;
   border-radius: 12px;
@@ -783,6 +919,45 @@ body.sketch-modal-open {
   margin-right: 4px;
 }
 
+.sketch-stats-actions {
+  margin-top: 8px;
+}
+
+.sketch-stats-hide-btn {
+  padding: 4px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.sketch-stats-hide-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.sketch-stats-hide-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sketch-stats-hidden-label {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px dashed #e2e8f0;
+}
+
 @media only screen and (max-width: 767px) {
   .sketch-tool {
     padding: 20px 14px 28px;
@@ -802,7 +977,12 @@ body.sketch-modal-open {
   }
 
   .sketch-preview-list {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    gap: 10px;
+  }
+
+  .sketch-stats-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }

@@ -21,6 +21,7 @@
 
   var $fileInput, $uploadZone, $btnUpload, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
   var $btnDownload, $elementsBox, $apiProxy, $siteToken, $genHint;
+  var $currentFileBox, $currentFileName, $currentFileDetail;
   var currentFile = null;
   var uploadedFiles = [];
   var selectedFileId = null;
@@ -333,6 +334,29 @@
 
     drawDecorations(ctx, w, h);
     return { dataUrl: canvas.toDataURL('image/png'), analysis: analysis };
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes || bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function updateCurrentFileDisplay() {
+    if (!$currentFileBox || !$currentFileName || !$currentFileDetail) return;
+    if (!currentFile) {
+      $currentFileBox.classList.add('is-empty');
+      $currentFileName.textContent = '尚未选择图片';
+      $currentFileDetail.textContent = '支持 JPG、PNG，单张最大 10MB · 可多选';
+      return;
+    }
+    $currentFileBox.classList.remove('is-empty');
+    $currentFileName.textContent = currentFile.name;
+    var detail = formatFileSize(currentFile.size);
+    if (uploadedFiles.length > 1) {
+      detail += ' · 共 ' + uploadedFiles.length + ' 张，点击缩略图切换';
+    }
+    $currentFileDetail.textContent = detail;
   }
 
   function setStatus(msg, loading) {
@@ -769,6 +793,7 @@
     });
     selectUploadedFile(id);
     renderPreviewList();
+    updateCurrentFileDisplay();
     $results.classList.remove('is-visible');
     return true;
   }
@@ -779,10 +804,8 @@
       if (addUploadedFile(fileList[i])) added += 1;
     }
     if (added > 0) {
-      setStatus(
-        '已添加 ' + added + ' 张图片' +
-          (uploadedFiles.length > 1 ? '（点击缩略图切换，当前：' + currentFile.name + '）' : '：' + currentFile.name),
-      );
+      updateCurrentFileDisplay();
+      setStatus('已添加 ' + added + ' 张图片，当前：' + currentFile.name);
     }
   }
 
@@ -795,6 +818,7 @@
     currentFile = item.file;
     $btnGenerate.disabled = false;
     renderPreviewList();
+    updateCurrentFileDisplay();
   }
 
   function removeUploadedFile(id) {
@@ -812,11 +836,13 @@
         currentFile = null;
         $btnGenerate.disabled = true;
         setStatus('等待上传图片…');
+        updateCurrentFileDisplay();
       }
     }
     renderPreviewList();
+    updateCurrentFileDisplay();
     if (uploadedFiles.length) {
-      setStatus('当前选中：' + currentFile.name + '（共 ' + uploadedFiles.length + ' 张）');
+      setStatus('当前选中：' + currentFile.name);
     }
     $results.classList.remove('is-visible');
   }
@@ -825,11 +851,14 @@
     if (!$previewList) return;
     $previewList.innerHTML = '';
     uploadedFiles.forEach(function (item) {
-      var wrap = document.createElement('div');
-      wrap.className = 'sketch-preview-item' + (item.id === selectedFileId ? ' is-active' : '');
-      wrap.title = item.name;
-      wrap.setAttribute('role', 'button');
-      wrap.setAttribute('tabindex', '0');
+      var card = document.createElement('div');
+      card.className = 'sketch-preview-card' + (item.id === selectedFileId ? ' is-active' : '');
+      card.title = item.name;
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+
+      var thumb = document.createElement('div');
+      thumb.className = 'sketch-preview-thumb';
 
       var img = document.createElement('img');
       img.src = item.url;
@@ -841,19 +870,25 @@
       btn.setAttribute('aria-label', '删除 ' + item.name);
       btn.textContent = '×';
 
+      var label = document.createElement('span');
+      label.className = 'sketch-preview-name';
+      label.textContent = item.name;
+
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         removeUploadedFile(item.id);
       });
 
-      wrap.addEventListener('click', function () {
+      card.addEventListener('click', function () {
         selectUploadedFile(item.id);
         setStatus('当前选中：' + item.name);
       });
 
-      wrap.appendChild(img);
-      wrap.appendChild(btn);
-      $previewList.appendChild(wrap);
+      thumb.appendChild(img);
+      thumb.appendChild(btn);
+      card.appendChild(thumb);
+      card.appendChild(label);
+      $previewList.appendChild(card);
     });
   }
 
@@ -876,8 +911,13 @@
     $apiProxy = $('sketch-api-proxy');
     $siteToken = $('sketch-site-token');
     $genHint = $('sketch-gen-mode-hint');
+    $currentFileBox = $('sketch-current-file');
+    $currentFileName = $('sketch-current-file-name');
+    $currentFileDetail = $('sketch-current-file-detail');
 
     if (!$fileInput) return;
+
+    updateCurrentFileDisplay();
 
     restoreModelChoice();
     syncModeFromConfig();
