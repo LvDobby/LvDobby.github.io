@@ -21,6 +21,7 @@
         "py3view": "cd _site && python3 -m http.server 8020",
         "watch": "grunt watch & npm run preview & jekyll serve -w",
         "py3wa": "grunt watch & npm run py3view & jekyll serve -w",
-        "build": "grunt default && jekyll build"
+        "build": "python3 scripts/build.py --grunt --jekyll",
+        "sync-sketch": "python3 scripts/sketch_sync.py",
     }
 }

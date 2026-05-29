@@ -1,0 +1,199 @@
+---
+layout: page
+title: 生活手绘注释图
+description: 上传照片，生成小红书风格手绘标注
+header-img: img/sketch-annotate-header.jpg
+permalink: /sketch-annotate/
+---
+
+{% assign sk_v = site.data.sketch_build.asset_version | default: '1' %}
+
+<link rel="stylesheet" href="{{ '/assets/sketch/css/sketch-annotate.css' | prepend: site.baseurl }}?v={{ sk_v }}">
+
+<script>
+  window.SKETCH_CONFIG = {
+    apiUrl: {{ site.sketch_api_url | jsonify }},
+    supabaseUrl: {{ site.supabase_url | jsonify }},
+    supabaseAnonKey: {{ site.supabase_anon_key | jsonify }}
+  };
+</script>
+
+<div class="sketch-tool">
+  <div id="sketch-user-bar" class="sketch-user-bar is-hidden">
+    <img id="sketch-user-avatar" class="sketch-user-avatar" src="" alt="" width="40" height="40">
+    <span id="sketch-user-name" class="sketch-user-name"></span>
+    <button type="button" id="sketch-btn-logout" class="sketch-logout-btn">退出登录</button>
+  </div>
+
+  <div id="sketch-login-modal" class="sketch-login-modal is-open" role="dialog" aria-modal="true" aria-labelledby="sketch-login-title">
+    <div class="sketch-login-backdrop" aria-hidden="true"></div>
+    <div class="sketch-panel sketch-login-card">
+      <div class="sketch-login-icon" aria-hidden="true">🔐</div>
+      <h3 id="sketch-login-title" class="sketch-login-title">欢迎使用生活手绘注释图</h3>
+      <p class="sketch-login-note">
+        请选择登录方式后使用上传与 AI 生成功能。
+      </p>
+      <div class="sketch-login-actions">
+        <button type="button" id="sketch-btn-github-login" class="sketch-github-btn">
+          <svg class="sketch-github-icon" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          使用 GitHub 登录
+        </button>
+        <button type="button" id="sketch-btn-guest-login" class="sketch-guest-btn">
+          <span aria-hidden="true">👤</span>
+          游客身份进入
+        </button>
+      </div>
+      <p class="sketch-login-hint">游客无需 GitHub 账号，系统将自动分配编号（游客01、游客02…）并写入统计</p>
+    </div>
+  </div>
+
+  <div id="sketch-app" class="sketch-app is-hidden">
+    <div class="sketch-hero">
+      <p class="sketch-intro">
+        上传日常照片，按<strong>小红书随手记录</strong>风格添加白色手绘线条与中文标注。
+        选择云端大模型直接改图。
+      </p>
+    </div>
+
+    <div class="sketch-panel">
+      {% include sketch-models.html %}
+    </div>
+
+    <input type="file" id="sketch-file-input" accept="image/*" multiple hidden>
+
+    <div class="sketch-panel sketch-upload-panel">
+      <h4 class="sketch-section-title">上传图片</h4>
+      <div class="sketch-upload-toolbar">
+        <button type="button" id="sketch-btn-upload" class="sketch-upload-btn" aria-label="选择图片上传">
+          <span class="sketch-upload-btn-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </span>
+          <span class="sketch-upload-btn-text">选择图片</span>
+        </button>
+
+        <div id="sketch-upload-zone" class="sketch-upload-zone" role="button" tabindex="0" aria-label="拖拽图片到此处">
+          <span class="sketch-upload-zone-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </span>
+          <span class="sketch-upload-zone-text">拖拽到此处</span>
+        </div>
+      </div>
+
+      <div id="sketch-current-file" class="sketch-current-file is-empty" aria-live="polite">
+        <span class="sketch-current-file-icon" aria-hidden="true">📄</span>
+        <div class="sketch-current-file-meta">
+          <span id="sketch-current-file-name" class="sketch-current-file-name">尚未选择图片</span>
+          <span id="sketch-current-file-detail" class="sketch-current-file-detail">支持 JPG、PNG，单张最大 10MB · 可多选</span>
+        </div>
+      </div>
+
+      <div id="sketch-preview-list" class="sketch-preview-list" aria-live="polite"></div>
+    </div>
+
+    <div class="sketch-actions">
+      <button type="button" id="sketch-btn-generate" class="sketch-generate-btn">
+        <span aria-hidden="true">✨</span> 生成手绘注释图
+      </button>
+    </div>
+
+    <p id="sketch-status" class="sketch-status">等待上传图片…</p>
+
+    <div id="sketch-results" class="sketch-results">
+      <div class="sketch-panel sketch-result-block">
+        <h4>① 原始上传图片</h4>
+        <div class="sketch-img-wrap">
+          <img id="sketch-img-original" alt="原始上传图片">
+        </div>
+      </div>
+
+      <div class="sketch-panel sketch-result-block">
+        <h4>② AI 生成手绘注释图</h4>
+        <p id="sketch-gen-mode-hint" class="sketch-gen-hint"></p>
+        <div class="sketch-img-wrap">
+          <img id="sketch-img-generated" alt="AI 生成手绘注释图">
+        </div>
+        <div class="sketch-download-row">
+          <a id="sketch-btn-download" class="sketch-download-btn" download="生活手绘注释图.png">
+            <span aria-hidden="true">⬇️</span> 下载图片
+          </a>
+        </div>
+        <div id="sketch-elements" class="sketch-elements"></div>
+      </div>
+    </div>
+
+    <details class="sketch-advanced sketch-panel">
+      <summary>高级设置（Worker 地址 / 访问令牌）</summary>
+      <div class="form-group">
+        <label for="sketch-api-proxy">Cloudflare Worker API 根地址</label>
+        <input type="url" id="sketch-api-proxy" class="form-control"
+          placeholder="https://sketch-annotate-api.xxx.workers.dev"
+          value="{{ site.sketch_api_url }}">
+        <p class="sketch-field-hint">
+          部署 Worker 后填入；留空则云端模式不可用。可在 _config.yml 的 <code>sketch_api_url</code> 统一配置。
+        </p>
+      </div>
+      <div class="form-group">
+        <label for="sketch-site-token">Worker 访问令牌（可选）</label>
+        <input type="password" id="sketch-site-token" class="form-control" placeholder="Bearer 令牌" autocomplete="off">
+      </div>
+    </details>
+  </div>
+
+  <details class="sketch-panel sketch-stats-section sketch-collapsible">
+    <summary class="sketch-stats-summary">
+      <span class="sketch-section-title sketch-section-title--inline">用户访问统计</span>
+      <span class="sketch-stats-summary-hint">按累计访问次数排序 · 点击展开</span>
+    </summary>
+    <div class="sketch-stats-body">
+      <p id="sketch-stats-loading" class="sketch-stats-loading">加载统计数据…</p>
+      <p id="sketch-stats-empty" class="sketch-stats-empty is-hidden">暂无用户数据，成为第一个登录的用户吧</p>
+      <div id="sketch-stats-list" class="sketch-stats-list"></div>
+    </div>
+  </details>
+
+  <details class="sketch-panel sketch-reactions-section sketch-collapsible" open>
+    <summary class="sketch-stats-summary">
+      <span class="sketch-section-title sketch-section-title--inline">页面反馈</span>
+      <span class="sketch-stats-summary-hint">赞 / 踩 · 点击展开</span>
+    </summary>
+    <div class="sketch-reactions-body">
+      <p class="sketch-reactions-note">登录后可点击图标表达看法，每次点击都会计入累计并留下记录。</p>
+      <div class="sketch-reactions-toolbar">
+        <div class="sketch-reaction-col">
+          <button type="button" id="sketch-btn-like" class="sketch-reaction-btn sketch-reaction-btn--like" aria-label="赞">
+            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+              <path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+            </svg>
+          </button>
+          <span id="sketch-like-count" class="sketch-reaction-count">0</span>
+          <span class="sketch-reaction-label">赞</span>
+        </div>
+        <div class="sketch-reaction-col">
+          <button type="button" id="sketch-btn-dislike" class="sketch-reaction-btn sketch-reaction-btn--dislike" aria-label="踩">
+            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+              <path fill="currentColor" d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23 16.41 16.41c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/>
+            </svg>
+          </button>
+          <span id="sketch-dislike-count" class="sketch-reaction-count">0</span>
+          <span class="sketch-reaction-label">踩</span>
+        </div>
+      </div>
+      <p id="sketch-reactions-loading" class="sketch-reactions-loading">加载反馈记录…</p>
+      <p id="sketch-reactions-empty" class="sketch-reactions-empty is-hidden">还没有人点赞或点踩，来做第一个吧</p>
+      <div id="sketch-reactions-list" class="sketch-reactions-list"></div>
+    </div>
+  </details>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="{{ '/assets/sketch/js/sketch-config.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>
+<script src="{{ '/assets/sketch/js/sketch-auth.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>
+<script src="{{ '/assets/sketch/js/sketch-annotate.js' | prepend: site.baseurl }}?v={{ sk_v }}"></script>

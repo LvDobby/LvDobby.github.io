@@ -40,3 +40,6 @@ workers/node_modules/
 workers/sketch-annotate-api/node_modules/
 workers/sketch-annotate-api/.wrangler/
 workers/sketch-annotate-api/.dev.vars
+
+__pycache__/
+scripts/**/__pycache__/

@@ -25,11 +25,7 @@ const PROXY_IMAGE_HOST_SUFFIXES = [
   'cloudfront.net',
 ];
 
-/** 前端可选模型（与 sketch-annotate.html 单选值一致） */
-const ALLOWED_IMAGE_MODELS = new Set([
-  'bytedance-seed/seedream-4.5',
-  'google/gemini-3-pro-image-preview',
-]);
+import { ALLOWED_IMAGE_MODELS } from './generated/models.js';
 
 export default {
   async fetch(request, env, ctx) {

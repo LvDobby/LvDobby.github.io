@@ -1,0 +1,14 @@
+# 手绘注释图 — 可选云端模型（单一数据源，由 scripts/sketch_sync.py 同步到前端与 Worker）
+default: bytedance-seed/seedream-4.5
+
+models:
+  - id: bytedance-seed/seedream-4.5
+    label: 豆包（Seedream 4.5）
+    short_label: 豆包 Seedream 4.5
+    html_id: sketch-model-doubao
+    default: true
+
+  - id: google/gemini-3-pro-image-preview
+    label: Nano Banana Pro（Gemini 3 Pro Image）
+    short_label: Nano Banana Pro
+    html_id: sketch-model-nano-banana
