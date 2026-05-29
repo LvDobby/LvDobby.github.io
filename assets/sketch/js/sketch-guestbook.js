@@ -4,8 +4,7 @@
 (function () {
   'use strict';
 
-  var GUEST_AVATAR_URL =
-    'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png';
+  var GUEST_AVATAR_URL = '/img/favicon.ico';
 
   var DISPLAY_MAX_LEN = 10;
 

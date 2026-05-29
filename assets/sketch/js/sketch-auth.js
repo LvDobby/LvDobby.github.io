@@ -5,9 +5,10 @@
   'use strict';
 
   var GUEST_STORAGE_KEY = 'sketch_guest_session';
-  var GUEST_AVATAR_URL =
-    'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png';
+  var GUEST_AVATAR_URL = '/img/favicon.ico';
   var HIDE_VISIT_STORAGE_PREFIX = 'sketch_hide_visit_';
+  var AUTH_INIT_TIMEOUT_MS = 3500;
+  var REQUEST_TIMEOUT_MS = 20000;
 
   var supabase = null;
   /** @type {{ type: 'github', user: object } | { type: 'guest', id: string, userName: string, avatarUrl: string } | null} */
@@ -16,6 +17,7 @@
   var readyCallbacks = [];
   var authChangeCallbacks = [];
   var authReady = false;
+  var guestLoginInProgress = false;
   var statsCache = [];
   var reactionsCache = [];
   var currentQuota = null;
@@ -40,6 +42,93 @@
   function isConfigured() {
     var cfg = getConfig();
     return !!(cfg.supabaseUrl && cfg.supabaseAnonKey);
+  }
+
+  function getSupabaseApiProxyBase() {
+    var cfg = getConfig();
+    var apiUrl = String(cfg.apiUrl || '').trim().replace(/\/$/, '');
+    if (!apiUrl || apiUrl.indexOf('sketch-annotate-proxy') === -1) return '';
+    return apiUrl;
+  }
+
+  function fetchWithTimeout(input, init, timeoutMs) {
+    var ms = timeoutMs || REQUEST_TIMEOUT_MS;
+    if (typeof AbortController === 'undefined') {
+      return fetch(input, init);
+    }
+    var controller = new AbortController();
+    var timer = setTimeout(function () {
+      controller.abort();
+    }, ms);
+    var opts = Object.assign({}, init || {}, { signal: controller.signal });
+    return fetch(input, opts).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function buildSupabaseProxyFetch() {
+    var cfg = getConfig();
+    var supabaseOrigin = String(cfg.supabaseUrl || '').replace(/\/$/, '');
+    var proxyBase = getSupabaseApiProxyBase();
+    if (!supabaseOrigin || !proxyBase) return null;
+
+    return function supabaseProxyFetch(input, init) {
+      var url = typeof input === 'string' ? input : input && input.url ? input.url : '';
+      if (!url || url.indexOf(supabaseOrigin) !== 0) {
+        return fetchWithTimeout(input, init);
+      }
+
+      var apiPath = url.slice(supabaseOrigin.length);
+      if (apiPath.indexOf('/functions/v1/') === 0) {
+        return fetchWithTimeout(input, init);
+      }
+
+      var proxyUrl =
+        proxyBase + '?path=' + encodeURIComponent('/supabase' + apiPath);
+      var opts = init ? Object.assign({}, init) : {};
+      if (typeof Request !== 'undefined' && input instanceof Request) {
+        opts.method = opts.method || input.method;
+        if (!opts.headers) opts.headers = input.headers;
+        if (opts.body === undefined && input.method !== 'GET' && input.method !== 'HEAD') {
+          opts.body = input.body;
+        }
+      }
+      return fetchWithTimeout(proxyUrl, opts);
+    };
+  }
+
+  function createSupabaseClient() {
+    var cfg = getConfig();
+    var options = {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+      realtime: {
+        enabled: false,
+      },
+    };
+    var proxyFetch = buildSupabaseProxyFetch();
+    if (proxyFetch) {
+      options.global = { fetch: proxyFetch };
+    }
+    return window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, options);
+  }
+
+  function scheduleAuthInitTimeout() {
+    setTimeout(function () {
+      if (authReady) return;
+      console.warn('Auth init timeout — enabling login without GitHub session probe');
+      if (restoreGuestSession()) {
+        notifyReady();
+        return;
+      }
+      if (!hasActiveGuestSession()) {
+        setView(false);
+      }
+      notifyReady();
+    }, AUTH_INIT_TIMEOUT_MS);
   }
 
   function isLoggedIn() {
@@ -108,8 +197,16 @@
     };
   }
 
+  function setLoginButtonsEnabled(enabled) {
+    if ($btnGithubLogin) $btnGithubLogin.disabled = !enabled;
+    if ($btnGuestLogin) $btnGuestLogin.disabled = !enabled;
+  }
+
   function notifyReady() {
     authReady = true;
+    if (isConfigured() && supabase) {
+      setLoginButtonsEnabled(!isLoggedIn());
+    }
     var loggedIn = isLoggedIn();
     readyCallbacks.splice(0).forEach(function (cb) {
       try {
@@ -150,7 +247,9 @@
       document.body.classList.add('sketch-modal-open');
     }
     resetGuestLoginButton();
-    if ($btnGithubLogin) $btnGithubLogin.disabled = false;
+    if (authReady && isConfigured() && supabase && !guestLoginInProgress) {
+      setLoginButtonsEnabled(true);
+    }
   }
 
   function hideLoginModal() {
@@ -183,23 +282,38 @@
     if ($userName) $userName.textContent = profile.userName;
   }
 
-  function saveGuestSession(row) {
+  function serializeGuestSession(row) {
+    return {
+      id: row.id,
+      userName: row.user_name,
+      avatarUrl: normalizeAvatarUrl(row.avatar_url, {
+        isGuest: true,
+        userName: row.user_name,
+      }),
+      isGuest: true,
+    };
+  }
+
+  function writeGuestSessionStorage(data) {
+    var payload = JSON.stringify(data);
+    var wrote = false;
     try {
-      localStorage.setItem(
-        GUEST_STORAGE_KEY,
-        JSON.stringify({
-          id: row.id,
-          userName: row.user_name,
-          avatarUrl: normalizeAvatarUrl(row.avatar_url, {
-            isGuest: true,
-            userName: row.user_name,
-          }),
-          isGuest: true,
-        }),
-      );
+      localStorage.setItem(GUEST_STORAGE_KEY, payload);
+      wrote = true;
     } catch (e) {
       /* ignore */
     }
+    try {
+      sessionStorage.setItem(GUEST_STORAGE_KEY, payload);
+      wrote = true;
+    } catch (e) {
+      /* ignore */
+    }
+    return wrote;
+  }
+
+  function saveGuestSession(row) {
+    writeGuestSessionStorage(serializeGuestSession(row));
   }
 
   function clearGuestSession() {
@@ -208,12 +322,16 @@
     } catch (e) {
       /* ignore */
     }
+    try {
+      sessionStorage.removeItem(GUEST_STORAGE_KEY);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  function readGuestSession() {
+  function parseGuestSession(raw) {
+    if (!raw) return null;
     try {
-      var raw = localStorage.getItem(GUEST_STORAGE_KEY);
-      if (!raw) return null;
       var data = JSON.parse(raw);
       if (!data || !data.id || !data.isGuest) return null;
       data.avatarUrl = normalizeAvatarUrl(data.avatarUrl, {
@@ -224,6 +342,25 @@
     } catch (e) {
       return null;
     }
+  }
+
+  function readGuestSession() {
+    var data = null;
+    try {
+      data = parseGuestSession(localStorage.getItem(GUEST_STORAGE_KEY));
+    } catch (e) {
+      /* ignore */
+    }
+    if (data) return data;
+    try {
+      return parseGuestSession(sessionStorage.getItem(GUEST_STORAGE_KEY));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function hasActiveGuestSession() {
+    return !!(currentSession && currentSession.type === 'guest');
   }
 
   function activateGuestSession(data) {
@@ -876,6 +1013,14 @@
   function handleGitHubSession(session, eventType) {
     var user = session && session.user;
     if (!user) {
+      if (guestLoginInProgress || hasActiveGuestSession()) {
+        if (hasActiveGuestSession()) {
+          setView(true);
+          notifyAuthChange(true);
+        }
+        notifyReady();
+        return Promise.resolve();
+      }
       if (restoreGuestSession()) {
         notifyReady();
         return Promise.resolve();
@@ -917,6 +1062,10 @@
   }
 
   function signInWithGitHub() {
+    if (!authReady) {
+      alert('页面仍在加载，请稍候再试');
+      return Promise.reject(new Error('Auth not ready'));
+    }
     if (!supabase) {
       alert('未配置 Supabase，请在 _config.yml 中填写 supabase_url 与 supabase_anon_key');
       return Promise.reject(new Error('Supabase not configured'));
@@ -935,6 +1084,10 @@
       alert('未配置 Supabase，请在 _config.yml 中填写 supabase_url 与 supabase_anon_key');
       return Promise.reject(new Error('Supabase not configured'));
     }
+    if (guestLoginInProgress) {
+      return Promise.reject(new Error('Guest login in progress'));
+    }
+    guestLoginInProgress = true;
     if ($btnGuestLogin) {
       $btnGuestLogin.disabled = true;
       $btnGuestLogin.textContent = '正在进入…';
@@ -946,14 +1099,16 @@
         notifyAuthChange(true);
       })
       .catch(function (err) {
-        resetGuestLoginButton();
-        if ($btnGithubLogin) $btnGithubLogin.disabled = false;
-        alert('游客进入失败：' + (err.message || '请稍后重试'));
+        var message = err && err.name === 'AbortError' ? '网络请求超时，请检查网络后重试' : err.message;
+        alert('游客进入失败：' + (message || '请稍后重试'));
         throw err;
       })
       .finally(function () {
+        guestLoginInProgress = false;
         resetGuestLoginButton();
-        if ($btnGithubLogin) $btnGithubLogin.disabled = false;
+        if (!isLoggedIn()) {
+          setLoginButtonsEnabled(true);
+        }
         notifyReady();
       });
   }
@@ -984,15 +1139,15 @@
     });
   }
 
-  function showConfigWarning() {
+  function showConfigWarning(message) {
     showLoginModal();
     var msg = document.querySelector('#sketch-login-modal .sketch-login-note');
     if (msg) {
       msg.textContent =
+        message ||
         '站点尚未配置 Supabase（supabase_url / supabase_anon_key），请在 _config.yml 中填写后重新部署。';
     }
-    if ($btnGithubLogin) $btnGithubLogin.disabled = true;
-    if ($btnGuestLogin) $btnGuestLogin.disabled = true;
+    setLoginButtonsEnabled(false);
     notifyReady();
   }
 
@@ -1045,6 +1200,7 @@
     if ($btnGithubLogin) {
       $btnGithubLogin.addEventListener('click', signInWithGitHub);
     }
+    setLoginButtonsEnabled(false);
     if ($btnGuestLogin) {
       $btnGuestLogin.addEventListener('click', signInAsGuest);
     }
@@ -1076,18 +1232,12 @@
 
     if (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
       console.error('Supabase SDK not loaded');
-      showConfigWarning();
+      showConfigWarning('登录组件加载失败，请刷新页面或检查网络后重试。');
       return;
     }
 
-    var cfg = getConfig();
-    supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    });
+    supabase = createSupabaseClient();
+    scheduleAuthInitTimeout();
 
     loadUserStats();
     loadPageReactions();
@@ -1112,7 +1262,18 @@
         notifyReady();
         return;
       }
+      if (hasActiveGuestSession()) {
+        setView(true);
+        notifyAuthChange(true);
+        notifyReady();
+        return;
+      }
       handleGitHubSession(null, 'SIGNED_OUT');
+    }).catch(function (err) {
+      console.error('getSession', err);
+      if (!authReady) {
+        notifyReady();
+      }
     });
   }
 

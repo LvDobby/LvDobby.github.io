@@ -1,20 +1,36 @@
 /**
- * 将浏览器请求转发到 Cloudflare Worker。
+ * 将浏览器请求转发到 Cloudflare Worker，或转发 Supabase REST/Auth（国内直连 REST 易失败）。
  * 国内网络访问 *.workers.dev 常出现 ERR_CERT_COMMON_NAME_INVALID，
- * 前端改走 *.supabase.co 本代理即可。
+ * 前端改走 *.supabase.co/functions/v1/sketch-annotate-proxy 即可。
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const WORKER_BASE =
   Deno.env.get("SKETCH_WORKER_URL") ?? "https://sketch-annotate-api.lvdobby.workers.dev";
 
+const SUPABASE_URL =
+  Deno.env.get("SUPABASE_URL") ?? "https://ejgemmhyeeuiudhqlioc.supabase.co";
+
 const ALLOWED_ORIGINS = (
   Deno.env.get("SKETCH_ALLOWED_ORIGINS") ??
-  "https://lvdobby.github.io,https://www.lvdobby.github.io,http://127.0.0.1:4000,http://localhost:4000"
+  "https://lvdobby.github.io,https://www.lvdobby.github.io,https://qiubaiying.top,https://www.qiubaiying.top,http://127.0.0.1:4000,http://localhost:4000"
 )
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+const FORWARD_HEADERS = [
+  "Authorization",
+  "apikey",
+  "Content-Type",
+  "Prefer",
+  "Accept",
+  "x-client-info",
+  "content-profile",
+  "Range",
+  "Accept-Profile",
+  "Content-Profile",
+];
 
 function corsHeaders(origin: string | null): Record<string, string> {
   let allowOrigin = ALLOWED_ORIGINS[0] ?? "*";
@@ -23,22 +39,32 @@ function corsHeaders(origin: string | null): Record<string, string> {
       allowOrigin = origin;
     } else if (/^https:\/\/([a-z0-9-]+\.)?lvdobby\.github\.io$/i.test(origin)) {
       allowOrigin = origin;
+    } else if (/^https:\/\/(www\.)?qiubaiying\.top$/i.test(origin)) {
+      allowOrigin = origin;
     }
   }
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": FORWARD_HEADERS.join(", "),
     "Access-Control-Max-Age": "86400",
   };
+}
+
+function parseProxyPath(raw: string): { pathname: string; search: string } {
+  let path = raw.trim();
+  if (!path.startsWith("/")) path = `/${path}`;
+  const qIdx = path.indexOf("?");
+  if (qIdx === -1) return { pathname: path, search: "" };
+  return { pathname: path.slice(0, qIdx), search: path.slice(qIdx) };
 }
 
 function workerPathFromRequest(url: URL): string {
   const fromQuery = url.searchParams.get("path");
   if (fromQuery) {
-    let path = fromQuery.trim();
-    if (!path.startsWith("/")) path = `/${path}`;
-    if (path.startsWith("/api/")) return path;
+    const { pathname } = parseProxyPath(fromQuery);
+    if (pathname.startsWith("/supabase/")) return fromQuery.trim();
+    if (pathname.startsWith("/api/")) return pathname;
   }
 
   const route = "/functions/v1/sketch-annotate-proxy";
@@ -69,6 +95,30 @@ function workerSearchFromRequest(url: URL): string {
   return qs ? `?${qs}` : "";
 }
 
+function forwardRequestHeaders(req: Request): Headers {
+  const headers = new Headers();
+  for (const name of FORWARD_HEADERS) {
+    const value = req.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return headers;
+}
+
+function proxyResponse(upstream: Response, cors: Record<string, string>): Response {
+  const respHeaders = new Headers(cors);
+  const ct = upstream.headers.get("Content-Type");
+  if (ct) respHeaders.set("Content-Type", ct);
+  const cache = upstream.headers.get("Cache-Control");
+  if (cache) respHeaders.set("Cache-Control", cache);
+  const contentRange = upstream.headers.get("Content-Range");
+  if (contentRange) respHeaders.set("Content-Range", contentRange);
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: respHeaders,
+  });
+}
+
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
   const cors = corsHeaders(origin);
@@ -78,32 +128,27 @@ Deno.serve(async (req: Request) => {
   }
 
   const incoming = new URL(req.url);
-  const path = workerPathFromRequest(incoming);
-  const target = `${WORKER_BASE.replace(/\/$/, "")}${path}${workerSearchFromRequest(incoming)}`;
-
-  const headers = new Headers();
-  const auth = req.headers.get("Authorization");
-  if (auth) headers.set("Authorization", auth);
-  const contentType = req.headers.get("Content-Type");
-  if (contentType) headers.set("Content-Type", contentType);
+  const rawPath = workerPathFromRequest(incoming);
+  const { pathname, search } = parseProxyPath(rawPath);
+  const headers = forwardRequestHeaders(req);
 
   const init: RequestInit = { method: req.method, headers };
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = req.body;
   }
 
+  let target: string;
+  if (pathname.startsWith("/supabase/")) {
+    const supabasePath = pathname.slice("/supabase".length) + search;
+    target = `${SUPABASE_URL.replace(/\/$/, "")}${supabasePath}`;
+  } else {
+    const workerPath = pathname.startsWith("/api/") ? pathname : "/api/health";
+    target = `${WORKER_BASE.replace(/\/$/, "")}${workerPath}${workerSearchFromRequest(incoming)}`;
+  }
+
   try {
     const upstream = await fetch(target, init);
-    const respHeaders = new Headers(cors);
-    const ct = upstream.headers.get("Content-Type");
-    if (ct) respHeaders.set("Content-Type", ct);
-    const cache = upstream.headers.get("Cache-Control");
-    if (cache) respHeaders.set("Cache-Control", cache);
-
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: respHeaders,
-    });
+    return proxyResponse(upstream, cors);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new Response(JSON.stringify({ error: message, code: "PROXY_UPSTREAM" }), {

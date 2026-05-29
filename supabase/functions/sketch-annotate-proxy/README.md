@@ -43,3 +43,12 @@ sketch_api_url: "https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-an
 ```
 
 用户「高级设置」里若仍填 `workers.dev`，页面会自动改回 Supabase 代理地址。
+
+## 国内登录 / 统计（Supabase REST 代理）
+
+无梯子时浏览器直连 `*.supabase.co/rest/v1` 或 `/auth/v1` 可能超时或被干扰。  
+前端已自动把 Supabase 客户端的 REST/Auth 请求改走同一 Edge Function：
+
+`?path=/supabase/rest/v1/...` 或 `?path=/supabase/auth/v1/...`
+
+与生图 API 共用 `sketch_api_url`，无需额外配置。部署新版本 Edge Function 后即可生效。
