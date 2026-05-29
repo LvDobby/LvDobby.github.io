@@ -665,6 +665,16 @@
     }
   }
 
+  function parseQuotaValue(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value));
+    }
+    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+      return Math.max(0, Math.floor(Number(value)));
+    }
+    return null;
+  }
+
   function loadUserQuota() {
     if (!supabase || !currentSession) {
       currentQuota = null;
@@ -679,16 +689,18 @@
       .single()
       .then(function (result) {
         if (result.error) throw result.error;
-        currentQuota =
-          typeof result.data.remaining_draw_quota === 'number'
-            ? result.data.remaining_draw_quota
-            : 1;
+        var parsed = parseQuotaValue(result.data && result.data.remaining_draw_quota);
+        currentQuota = parsed !== null ? parsed : 1;
         renderQuotaUI();
         return currentQuota;
       })
       .catch(function (err) {
         console.error('loadUserQuota', err);
-        currentQuota = 0;
+        if (currentQuota !== null) {
+          renderQuotaUI();
+          return currentQuota;
+        }
+        currentQuota = 1;
         renderQuotaUI();
         return currentQuota;
       });

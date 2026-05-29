@@ -37,11 +37,15 @@ export async function generateWithOpenRouter(env, dataUri, modelOverride) {
 }
 
 function getModelChain(env, modelOverride) {
-  if (modelOverride) return [modelOverride];
-  const primary = env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
-  const fallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
+  const defaultModel = env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
+  const envFallback = (env.OPENROUTER_FALLBACK_MODEL || '').trim();
+  const primary = modelOverride || defaultModel;
   const chain = [primary];
-  if (fallback && fallback !== primary) chain.push(fallback);
+  if (envFallback && envFallback !== primary) chain.push(envFallback);
+  // 用户在前端显式选择的模型失败时，回退到站点默认模型（避免仅单模型无 fallback）
+  if (defaultModel !== primary && !chain.includes(defaultModel)) {
+    chain.push(defaultModel);
+  }
   return chain;
 }
 

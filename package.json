@@ -22,6 +22,6 @@
         "watch": "grunt watch & npm run preview & jekyll serve -w",
         "py3wa": "grunt watch & npm run py3view & jekyll serve -w",
         "build": "python3 scripts/build.py --grunt --jekyll",
-        "sync-sketch": "python3 scripts/sketch_sync.py",
+        "sync-sketch": "python3 scripts/sketch_sync.py"
     }
 }

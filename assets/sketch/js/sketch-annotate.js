@@ -242,14 +242,45 @@
     });
   }
 
+  function blobToGeneratedResult(blob, modelLabel) {
+    return cloudPayloadToResult(URL.createObjectURL(blob), modelLabel);
+  }
+
   function cloudResultFromStatus(data, apiBase, headers) {
     var modelLabel = MODEL_LABELS[data.model] || getSelectedModelLabel();
     var authHeaders = headers || getAuthHeaders();
+    var fetchCandidates = [];
 
+    if (data.imageUrl && /^https?:\/\//i.test(data.imageUrl)) {
+      fetchCandidates.push(data.imageUrl);
+    }
     if (data.imageFetchUrl) {
-      return fetchGeneratedBlob(data.imageFetchUrl, apiBase, authHeaders).then(function (blob) {
-        return cloudPayloadToResult(URL.createObjectURL(blob), modelLabel);
-      });
+      var relativeOrAbsolute = /^https?:\/\//i.test(data.imageFetchUrl)
+        ? data.imageFetchUrl
+        : apiBase + data.imageFetchUrl;
+      if (fetchCandidates.indexOf(relativeOrAbsolute) === -1) {
+        fetchCandidates.push(relativeOrAbsolute);
+      }
+    }
+
+    function tryFetchBlob(index) {
+      if (index >= fetchCandidates.length) {
+        return Promise.reject(new Error('获取生成图失败，请稍后重试'));
+      }
+      return fetchGeneratedBlob(fetchCandidates[index], apiBase, authHeaders)
+        .then(function (blob) {
+          return blobToGeneratedResult(blob, modelLabel);
+        })
+        .catch(function (err) {
+          if (index + 1 < fetchCandidates.length) {
+            return tryFetchBlob(index + 1);
+          }
+          throw err;
+        });
+    }
+
+    if (fetchCandidates.length) {
+      return tryFetchBlob(0);
     }
 
     function resolveRemoteImage(remoteUrl) {
@@ -500,6 +531,10 @@
             );
           } else if (isBillingError(msg)) {
             setStatus('OpenRouter 余额不足，请前往 openrouter.ai/credits 充值后再试');
+          } else if (/region|Gemini 图像模型|not available in your region/i.test(msg)) {
+            setStatus(
+              '当前模型在本区域不可用，已尝试自动切换；请改选「豆包 Seedream 4.5」后重试（未扣减额度）',
+            );
           } else {
             setStatus('生成失败：' + msg + '（未扣减额度，请重试）');
           }
