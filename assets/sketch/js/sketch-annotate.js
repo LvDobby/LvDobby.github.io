@@ -137,6 +137,12 @@
     return /insufficient credit|billing|余额不足|充值|openrouter\.ai\/credits/i.test(msg || '');
   }
 
+  function isNetworkError(msg) {
+    return /failed to fetch|networkerror|network request failed|load failed|fetch failed/i.test(
+      msg || '',
+    );
+  }
+
   function isConfigError(msg) {
     return (
       /OPENROUTER_API_KEY|REPLICATE_API_TOKEN|Unauthorized|未配置 Worker|User not found|API Key 无效|invalid.*key|JPG\/PNG|图片格式/i.test(
@@ -223,11 +229,36 @@
     };
   }
 
+  function fetchWithRetry(url, options, retriesLeft) {
+    return fetch(url, options).catch(function (err) {
+      if (retriesLeft > 0 && isNetworkError(err && err.message ? err.message : String(err))) {
+        return new Promise(function (resolve) {
+          setTimeout(resolve, 1200);
+        }).then(function () {
+          return fetchWithRetry(url, options, retriesLeft - 1);
+        });
+      }
+      throw err;
+    });
+  }
+
+  function checkApiReachable(apiBase) {
+    return fetchWithRetry(apiBase + '/api/health', { method: 'GET', headers: getAuthHeaders() }, 1)
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (text) {
+            throw new Error('Worker 不可用（HTTP ' + res.status + '）：' + text.slice(0, 120));
+          });
+        }
+        return res.json();
+      });
+  }
+
   function fetchGeneratedBlob(fetchPath, apiBase, headers) {
     var authHeaders = headers || getAuthHeaders();
     var fullUrl =
       /^https?:\/\//i.test(fetchPath) ? fetchPath : apiBase + fetchPath;
-    return fetch(fullUrl, { headers: authHeaders }).then(function (res) {
+    return fetchWithRetry(fullUrl, { headers: authHeaders }, 1).then(function (res) {
       if (!res.ok) {
         return res
           .json()
@@ -406,11 +437,11 @@
         setStatus(modelLabel + ' 生成中…已等待 ' + secs + ' 秒，请勿关闭页面', true);
       }, GENERATE_WAIT_HINT_MS);
 
-      return fetch(apiBase + '/api/annotate', {
+      return fetchWithRetry(apiBase + '/api/annotate', {
         method: 'POST',
         headers: headers,
         body: form,
-      })
+      }, 1)
       .then(function (res) {
         return res.text().then(function (text) {
           var data;
@@ -498,20 +529,25 @@
     }
     var startGenerate = function () {
       $btnGenerate.disabled = true;
-      setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
+      setStatus('正在检查生图服务连接…', true);
 
-      fileToDataUrl(currentFile)
-        .then(function (originalDataUrl) {
-          return generateWithCloudProxy(currentFile).then(function (payload) {
-            return {
-              originalUrl: originalDataUrl,
-              generatedUrl: payload.generatedUrl,
-              analysis: { elements: payload.elements },
-              modeLabel: payload.modeLabel,
-            };
-          });
+      checkApiReachable(getApiBase())
+        .then(function () {
+          setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
+          return fileToDataUrl(currentFile)
+            .then(function (originalDataUrl) {
+              return generateWithCloudProxy(currentFile).then(function (payload) {
+                return {
+                  originalUrl: originalDataUrl,
+                  generatedUrl: payload.generatedUrl,
+                  analysis: { elements: payload.elements },
+                  modeLabel: payload.modeLabel,
+                };
+              });
+            });
         })
         .then(function (payload) {
+          if (!payload) return;
           showResults(
             payload.originalUrl,
             payload.generatedUrl,
@@ -535,6 +571,14 @@
             setStatus(
               '当前模型在本区域不可用，已尝试自动切换；请改选「豆包 Seedream 4.5」后重试（未扣减额度）',
             );
+          } else if (isNetworkError(msg)) {
+            setStatus(
+              '无法连接生图服务（' +
+                msg +
+                '）。请用 https://lvdobby.github.io/sketch-annotate/ 打开页面，清空高级设置里错误的 Worker 地址后重试（未扣减额度）',
+            );
+          } else if (/图片加载失败|图片压缩失败|图片解码失败|图片格式/i.test(msg)) {
+            setStatus(msg + '（未扣减额度，请换 JPG/PNG 后重试）');
           } else {
             setStatus('生成失败：' + msg + '（未扣减额度，请重试）');
           }

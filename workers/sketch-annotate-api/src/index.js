@@ -101,13 +101,6 @@ function getModelLabel(env) {
   return env.OPENROUTER_MODEL || 'bytedance-seed/seedream-4.5';
 }
 
-function isOriginAllowed(request, env) {
-  const origin = request.headers.get('Origin');
-  if (!origin) return true;
-  const allowed = parseOrigins(env.ALLOWED_ORIGINS);
-  return allowed.includes(origin);
-}
-
 function parseOrigins(raw) {
   return (raw || '')
     .split(',')
@@ -115,10 +108,34 @@ function parseOrigins(raw) {
     .filter(Boolean);
 }
 
+function isGithubPagesOrigin(origin) {
+  if (!origin) return false;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return (
+      protocol === 'https:' &&
+      (hostname === 'lvdobby.github.io' || hostname.endsWith('.lvdobby.github.io'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isOriginAllowed(request, env) {
+  const origin = request.headers.get('Origin');
+  if (!origin) return true;
+  const allowed = parseOrigins(env.ALLOWED_ORIGINS);
+  if (allowed.includes(origin)) return true;
+  return isGithubPagesOrigin(origin);
+}
+
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
   const allowed = parseOrigins(env.ALLOWED_ORIGINS);
-  const allowOrigin = allowed.includes(origin) ? origin : allowed[0] || '*';
+  let allowOrigin = allowed[0] || '*';
+  if (origin && (allowed.includes(origin) || isGithubPagesOrigin(origin))) {
+    allowOrigin = origin;
+  }
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
