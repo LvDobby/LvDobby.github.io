@@ -7,68 +7,7 @@
   var GUEST_AVATAR_URL =
     'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png';
 
-  var STOP_WORDS = {
-    的: 1,
-    了: 1,
-    是: 1,
-    在: 1,
-    我: 1,
-    有: 1,
-    和: 1,
-    就: 1,
-    不: 1,
-    人: 1,
-    都: 1,
-    一: 1,
-    一个: 1,
-    上: 1,
-    也: 1,
-    很: 1,
-    到: 1,
-    说: 1,
-    要: 1,
-    去: 1,
-    你: 1,
-    会: 1,
-    着: 1,
-    没有: 1,
-    看: 1,
-    好: 1,
-    自己: 1,
-    这: 1,
-    那: 1,
-    吗: 1,
-    吧: 1,
-    啊: 1,
-    呢: 1,
-    哦: 1,
-    嗯: 1,
-    哈: 1,
-    什么: 1,
-    怎么: 1,
-    可以: 1,
-    这个: 1,
-    那个: 1,
-    就是: 1,
-    觉得: 1,
-    一下: 1,
-    真的: 1,
-    还是: 1,
-    我们: 1,
-    你们: 1,
-    他们: 1,
-    不是: 1,
-    可能: 1,
-    已经: 1,
-    非常: 1,
-    比较: 1,
-    感觉: 1,
-    希望: 1,
-    谢谢: 1,
-  };
-
-  var MAX_KW_LEN = 4;
-  var MIN_KW_LEN = 2;
+  var DISPLAY_MAX_LEN = 10;
 
   var KEYWORD_PALETTE = [
     { bg: 'hsla(210, 18%, 91%, 0.98)', fg: 'hsl(210, 22%, 40%)' },
@@ -152,103 +91,20 @@
     return { userName: '', avatarUrl: '' };
   }
 
-  function trimKeyword(word) {
-    var chars = Array.from(String(word || '').trim());
-    if (!chars.length) return '';
-    if (chars.length <= MAX_KW_LEN) return chars.join('');
-    return chars.slice(0, MAX_KW_LEN).join('');
+  /** 留言正文规范化（合并空白，保留整体内容） */
+  function normalizeGuestbookText(text) {
+    return String(text || '')
+      .trim()
+      .replace(/\s+/g, ' ');
   }
 
-  function isValidKeyword(word) {
-    word = trimKeyword(word);
-    if (word.length < MIN_KW_LEN || word.length > MAX_KW_LEN) return false;
-    if (STOP_WORDS[word]) return false;
-    if (/^\d+$/.test(word)) return false;
-    return true;
-  }
-
-  /** 每条留言总结一个完整关键词（小于 5 字，即最多 4 字） */
-  function pickKeyword(text) {
-    var raw = String(text || '').trim().replace(/\s+/g, ' ');
+  /** 词云/标签展示：整体输出，超过 10 字截断并省略 */
+  function formatGuestbookDisplayText(text) {
+    var raw = normalizeGuestbookText(text);
     if (!raw) return '留言';
-
-    var compact = raw.replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '');
-    if (compact && Array.from(compact).length <= MAX_KW_LEN && isValidKeyword(compact)) {
-      return trimKeyword(compact);
-    }
-
-    var themeRules = [
-      [/太?(棒|赞|好|牛)/, '超赞'],
-      [/不(错|赖)/, '不错'],
-      [/推荐/, '推荐'],
-      [/喜欢|爱了/, '喜欢'],
-      [/感谢|谢谢/, '感谢'],
-      [/期待|希望/, '期待'],
-      [/建议|改进/, '建议'],
-      [/体验|感受/, '体验'],
-      [/手绘|注释/, '手绘'],
-      [/生成|效果/, '生成'],
-      [/好玩|有趣/, '好玩'],
-      [/厉害|强/, '厉害'],
-      [/速度|快/, '很快'],
-      [/漂亮|美观/, '好看'],
-    ];
-    var ti;
-    for (ti = 0; ti < themeRules.length; ti += 1) {
-      if (themeRules[ti][0].test(raw) && isValidKeyword(themeRules[ti][1])) {
-        return themeRules[ti][1];
-      }
-    }
-
-    var candidates = [];
-    var parts = raw.split(/[，。！？；;,.\!\?\(\)（）\[\]【】「」"'‘’“”\/\\|｜\n]+/);
-
-    function pushCandidate(word, score) {
-      word = trimKeyword(word);
-      if (!isValidKeyword(word)) return;
-      candidates.push({ word: word, score: score });
-    }
-
-    parts.forEach(function (part, partIndex) {
-      part = part.trim();
-      if (!part) return;
-
-      if (Array.from(part).length <= MAX_KW_LEN && /[\u4e00-\u9fffA-Za-z]/.test(part)) {
-        pushCandidate(part, 48 + part.length * 4 + (parts.length - partIndex));
-      }
-
-      var cnRuns = part.match(/[\u4e00-\u9fff]+/g) || [];
-      cnRuns.forEach(function (run) {
-        if (run.length <= MAX_KW_LEN) {
-          pushCandidate(run, 46 + run.length * 5);
-          return;
-        }
-        var len;
-        for (len = MAX_KW_LEN; len >= MIN_KW_LEN; len -= 1) {
-          pushCandidate(run.slice(0, len), 42 + len * 4 + (parts.length - partIndex));
-        }
-        pushCandidate(run.slice(-MAX_KW_LEN), 38 + MAX_KW_LEN);
-      });
-
-      var enWords = part.match(/[a-zA-Z][a-zA-Z0-9_-]*/g) || [];
-      enWords.forEach(function (w) {
-        pushCandidate(w, 34 + Math.min(w.length, MAX_KW_LEN));
-      });
-    });
-
-    if (candidates.length) {
-      candidates.sort(function (a, b) {
-        if (b.score !== a.score) return b.score - a.score;
-        return b.word.length - a.word.length;
-      });
-      return candidates[0].word;
-    }
-
-    var cn = raw.match(/[\u4e00-\u9fff]{2,4}/);
-    if (cn) return trimKeyword(cn[0]);
-
-    var fallback = trimKeyword(compact || raw);
-    return isValidKeyword(fallback) ? fallback : '留言';
+    var chars = Array.from(raw);
+    if (chars.length <= DISPLAY_MAX_LEN) return raw;
+    return chars.slice(0, DISPLAY_MAX_LEN).join('') + '…';
   }
 
   function makeDistinctStyle(index, total) {
@@ -272,8 +128,10 @@
     var list = sortEntriesByTime(entries);
     var total = list.length;
     return list.map(function (row, index) {
+      var fullText = normalizeGuestbookText(row.content) || '留言';
       return {
-        word: pickKeyword(row.content),
+        word: formatGuestbookDisplayText(row.content),
+        fullText: fullText,
         style: makeDistinctStyle(index, total),
         row: row,
         timeIndex: index,
@@ -288,12 +146,15 @@
     return null;
   }
 
-  function keywordTagHtml(word, style, extraClass) {
+  function keywordTagHtml(word, style, extraClass, fullText) {
     var cls = 'sketch-guestbook-kw-tag' + (extraClass ? ' ' + extraClass : '');
+    var titleAttr = fullText && fullText !== word ? ' title="' + escapeHtml(fullText) + '"' : '';
     return (
       '<span class="' +
       cls +
-      '" style="color:' +
+      '"' +
+      titleAttr +
+      ' style="color:' +
       style.fg +
       ';background:' +
       style.bg +
@@ -310,7 +171,7 @@
     if (!items.length) {
       if ($cloudEmpty) {
         $cloudEmpty.textContent = guestbookCache.length
-          ? '留言已收录，暂未提取到关键词'
+          ? '留言已收录，暂无可展示内容'
           : '暂无留言，来做第一个留言的人吧';
         $cloudEmpty.classList.remove('is-hidden');
       }
@@ -351,7 +212,7 @@
         ' · ' +
         formatDateTime(item.row.created_at) +
         '：' +
-        item.word;
+        (item.fullText || item.word);
       $cloud.appendChild(span);
     });
   }
@@ -370,11 +231,13 @@
         var avatar = escapeHtml(normalizeAvatarUrl(row.avatar_url, row.user_name));
         var content = escapeHtml(row.content || '');
         var keywordItem = findKeywordItem(row.id) || {
-          word: pickKeyword(row.content),
+          word: formatGuestbookDisplayText(row.content),
+          fullText: normalizeGuestbookText(row.content) || '留言',
           style: makeDistinctStyle(0, 1),
         };
         var keyword = keywordItem.word;
         var kwStyle = keywordItem.style;
+        var kwFull = keywordItem.fullText;
         var avatarHtml = avatar
           ? '<img class="sketch-guestbook-detail-avatar" src="' +
             avatar +
@@ -390,7 +253,7 @@
           '<div class="sketch-guestbook-detail-name">' +
           name +
           '</div>' +
-          keywordTagHtml(keyword, kwStyle, 'sketch-guestbook-detail-kw') +
+          keywordTagHtml(keyword, kwStyle, 'sketch-guestbook-detail-kw', kwFull) +
           '</div>' +
           '<div class="sketch-guestbook-detail-time">' +
           formatDateTime(row.created_at) +
