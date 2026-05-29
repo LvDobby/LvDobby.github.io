@@ -206,21 +206,23 @@ sketch_guestbook: true
       <button type="button" id="sketch-quota-pay-btn" class="sketch-quota-pay-btn">大哥有钱</button>
     </div>
     <div id="sketch-quota-state-pay" class="sketch-quota-pay-wrap is-hidden">
-      <img
-        class="sketch-quota-qr sketch-quota-qr--top"
-        src="{{ '/img/shoukuanma.jpg' | prepend: site.baseurl }}"
-        alt="微信收款码"
-        width="200"
-        height="200"
-        loading="lazy">
       <p class="sketch-quota-pay-hint">请使用微信扫码付款，完成后再点击下方按钮确认</p>
-      <img
-        class="sketch-quota-qr sketch-quota-qr--bottom"
-        src="{{ '/img/thanksboss.png' | prepend: site.baseurl }}"
-        alt="微信收款码"
-        width="200"
-        height="200"
-        loading="lazy">
+      <div class="sketch-quota-qr-row">
+        <img
+          class="sketch-quota-qr"
+          src="{{ '/img/shoukuanma.jpg' | prepend: site.baseurl }}"
+          alt="微信收款码"
+          width="180"
+          height="180"
+          loading="lazy">
+        <img
+          class="sketch-quota-qr"
+          src="{{ '/img/thanksboss.png' | prepend: site.baseurl }}"
+          alt="感谢支持"
+          width="180"
+          height="180"
+          loading="lazy">
+      </div>
       <button type="button" id="sketch-quota-paid-btn" class="sketch-quota-pay-btn sketch-quota-paid-btn">我已完成扫码付款</button>
     </div>
     <div id="sketch-quota-state-thanks" class="sketch-quota-thanks-wrap is-hidden">

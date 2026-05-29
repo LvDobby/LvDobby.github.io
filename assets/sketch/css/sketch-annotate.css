@@ -513,6 +513,23 @@
   gap: 14px;
 }
 
+.sketch-quota-card:has(#sketch-quota-state-pay:not(.is-hidden)) {
+  max-width: 480px;
+}
+
+.sketch-quota-qr-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.sketch-quota-qr-row .sketch-quota-qr {
+  width: min(168px, 38vw);
+}
+
 .sketch-quota-qr {
   display: block;
   width: min(200px, 72vw);
