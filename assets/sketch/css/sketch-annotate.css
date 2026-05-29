@@ -1236,7 +1236,10 @@ body.sketch-modal-open {
   transform: translate(-50%, -50%);
   font-weight: 600;
   line-height: 1.2;
+  max-width: 6em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
   padding: 3px 9px;
   border-radius: 999px;
@@ -1254,12 +1257,15 @@ body.sketch-modal-open {
 .sketch-guestbook-kw-tag {
   display: inline-flex;
   align-items: center;
+  max-width: 6em;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 1px solid rgba(255, 255, 255, 0.7);
 }
 
