@@ -444,11 +444,12 @@
     $btnDownload.href = generatedUrl;
   }
 
+  function syncGenerateButton() {
+    if (!$btnGenerate) return;
+    $btnGenerate.disabled = !currentFile;
+  }
+
   function onGenerate() {
-    if (window.SketchAuth && !window.SketchAuth.isLoggedIn()) {
-      setStatus('请先登录后再生成（GitHub 或游客身份均可）');
-      return;
-    }
     if (!currentFile) {
       setStatus('请先选择一张图片');
       return;
@@ -459,6 +460,11 @@
     }
 
     var auth = window.SketchAuth;
+    if (auth && !auth.isLoggedIn()) {
+      setStatus('请先登录后再生成（GitHub 或游客身份均可）');
+      if (auth.promptLogin) auth.promptLogin();
+      return;
+    }
     var startGenerate = function () {
       $btnGenerate.disabled = true;
       setStatus('正在使用 ' + getSelectedModelLabel() + ' 生成手绘注释图…', true);
@@ -504,13 +510,20 @@
     };
 
     if (auth && auth.ensureQuotaLoaded) {
-      auth.ensureQuotaLoaded().then(function (quota) {
-        if (quota <= 0) {
-          if (auth.showQuotaExhaustedModal) auth.showQuotaExhaustedModal();
-          return;
-        }
-        startGenerate();
-      });
+      auth
+        .ensureQuotaLoaded()
+        .then(function (quota) {
+          if (quota <= 0) {
+            if (auth.showQuotaExhaustedModal) auth.showQuotaExhaustedModal();
+            setStatus('额度已用完，请按弹窗提示加次后再生成');
+            return;
+          }
+          startGenerate();
+        })
+        .catch(function (err) {
+          console.error('ensureQuotaLoaded', err);
+          setStatus('额度查询失败，请稍后重试');
+        });
       return;
     }
 
@@ -569,7 +582,7 @@
     if (!item) return;
     selectedFileId = id;
     currentFile = item.file;
-    $btnGenerate.disabled = false;
+    syncGenerateButton();
     renderPreviewList();
     updateCurrentFileDisplay();
   }
@@ -587,7 +600,7 @@
       } else {
         selectedFileId = null;
         currentFile = null;
-        $btnGenerate.disabled = true;
+        syncGenerateButton();
         setStatus('等待上传图片…');
         updateCurrentFileDisplay();
       }
@@ -736,7 +749,7 @@
       $apiProxy.addEventListener('change', syncModeFromConfig);
     }
 
-    $btnGenerate.disabled = true;
+    syncGenerateButton();
   }
 
   function init() {
@@ -745,10 +758,8 @@
         initApp();
       });
       if (window.SketchAuth.onAuthChange) {
-        window.SketchAuth.onAuthChange(function (loggedIn) {
-          if (loggedIn && $fileInput && $btnGenerate) {
-            $btnGenerate.disabled = !currentFile;
-          }
+        window.SketchAuth.onAuthChange(function () {
+          syncGenerateButton();
         });
       }
       return;

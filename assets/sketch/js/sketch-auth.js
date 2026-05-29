@@ -159,10 +159,13 @@
   }
 
   function setView(loggedIn) {
-    hideLoginModal();
-    if (!loggedIn) showLoginModal();
-    if ($app) $app.classList.toggle('is-hidden', !loggedIn);
+    if ($app) $app.classList.remove('is-hidden');
     if ($userBar) $userBar.classList.toggle('is-hidden', !loggedIn);
+    if (loggedIn) {
+      hideLoginModal();
+    } else {
+      showLoginModal();
+    }
   }
 
   function renderUserBarFromProfile(profile) {
@@ -685,7 +688,7 @@
       })
       .catch(function (err) {
         console.error('loadUserQuota', err);
-        currentQuota = 1;
+        currentQuota = 0;
         renderQuotaUI();
         return currentQuota;
       });
@@ -693,7 +696,6 @@
 
   function ensureQuotaLoaded() {
     if (!isLoggedIn()) return Promise.resolve(0);
-    if (currentQuota !== null) return Promise.resolve(currentQuota);
     return loadUserQuota();
   }
 
@@ -985,6 +987,7 @@
   function bindDom() {
     $loginModal = $('sketch-login-modal');
     $app = $('sketch-app');
+    if ($app) $app.classList.remove('is-hidden');
     $userBar = $('sketch-user-bar');
     $userAvatar = $('sketch-user-avatar');
     $userName = $('sketch-user-name');
@@ -1022,6 +1025,11 @@
       $quotaBackdrop.addEventListener('click', onQuotaBackdropClick);
     }
 
+    var loginBackdrop = $loginModal ? $loginModal.querySelector('.sketch-login-backdrop') : null;
+    if (loginBackdrop) {
+      loginBackdrop.addEventListener('click', hideLoginModal);
+    }
+
     if ($btnGithubLogin) {
       $btnGithubLogin.addEventListener('click', signInWithGitHub);
     }
@@ -1048,7 +1056,6 @@
 
   function initSupabase() {
     bindDom();
-    showLoginModal();
 
     if (!isConfigured()) {
       showConfigWarning();
