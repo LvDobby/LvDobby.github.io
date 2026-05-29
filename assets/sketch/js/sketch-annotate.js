@@ -12,8 +12,9 @@
   var MAX_FILE_SIZE = 10 * 1024 * 1024;
   var MAX_SIDE = 1400;
 
-  var $fileInput, $uploadZone, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
+  var $fileInput, $uploadZone, $btnUpload, $previewList, $btnGenerate, $status, $results, $originalImg, $generatedImg;
   var $btnDownload, $elementsBox, $apiProxy, $siteToken, $genHint;
+  var $currentFileBox, $currentFileName, $currentFileDetail;
   var currentFile = null;
   var uploadedFiles = [];
   var selectedFileId = null;
@@ -91,6 +92,29 @@
     if (Math.max(w, h) <= MAX_SIDE) return { w: w, h: h };
     var s = MAX_SIDE / Math.max(w, h);
     return { w: Math.round(w * s), h: Math.round(h * s) };
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes || bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function updateCurrentFileDisplay() {
+    if (!$currentFileBox || !$currentFileName || !$currentFileDetail) return;
+    if (!currentFile) {
+      $currentFileBox.classList.add('is-empty');
+      $currentFileName.textContent = '尚未选择图片';
+      $currentFileDetail.textContent = '支持 JPG、PNG，单张最大 10MB · 可多选';
+      return;
+    }
+    $currentFileBox.classList.remove('is-empty');
+    $currentFileName.textContent = currentFile.name;
+    var detail = formatFileSize(currentFile.size);
+    if (uploadedFiles.length > 1) {
+      detail += ' · 共 ' + uploadedFiles.length + ' 张，点击缩略图切换';
+    }
+    $currentFileDetail.textContent = detail;
   }
 
   function setStatus(msg, loading) {
@@ -522,6 +546,7 @@
     });
     selectUploadedFile(id);
     renderPreviewList();
+    updateCurrentFileDisplay();
     $results.classList.remove('is-visible');
     return true;
   }
@@ -532,6 +557,7 @@
       if (addUploadedFile(fileList[i])) added += 1;
     }
     if (added > 0) {
+      updateCurrentFileDisplay();
       setStatus('已添加 ' + added + ' 张图片，当前：' + currentFile.name);
     }
   }
@@ -545,6 +571,7 @@
     currentFile = item.file;
     $btnGenerate.disabled = false;
     renderPreviewList();
+    updateCurrentFileDisplay();
   }
 
   function removeUploadedFile(id) {
@@ -562,9 +589,11 @@
         currentFile = null;
         $btnGenerate.disabled = true;
         setStatus('等待上传图片…');
+        updateCurrentFileDisplay();
       }
     }
     renderPreviewList();
+    updateCurrentFileDisplay();
     if (uploadedFiles.length) {
       setStatus('当前选中：' + currentFile.name);
     }
@@ -623,6 +652,7 @@
   function initApp() {
     $fileInput = $('sketch-file-input');
     $uploadZone = $('sketch-upload-zone');
+    $btnUpload = $('sketch-btn-upload');
     $previewList = $('sketch-preview-list');
     $btnGenerate = $('sketch-btn-generate');
     $status = $('sketch-status');
@@ -634,8 +664,13 @@
     $apiProxy = $('sketch-api-proxy');
     $siteToken = $('sketch-site-token');
     $genHint = $('sketch-gen-mode-hint');
+    $currentFileBox = $('sketch-current-file');
+    $currentFileName = $('sketch-current-file-name');
+    $currentFileDetail = $('sketch-current-file-detail');
 
     if (!$fileInput || !$uploadZone) return;
+
+    updateCurrentFileDisplay();
 
     restoreModelChoice();
     syncModeFromConfig();
@@ -643,6 +678,13 @@
     var modelInputs = document.querySelectorAll('input[name="sketch-model"]');
     for (var mi = 0; mi < modelInputs.length; mi += 1) {
       modelInputs[mi].addEventListener('change', persistModelChoice);
+    }
+
+    if ($btnUpload) {
+      $btnUpload.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openFilePicker();
+      });
     }
 
     if ($uploadZone) {

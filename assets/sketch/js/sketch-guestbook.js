@@ -67,7 +67,7 @@
     谢谢: 1,
   };
 
-  var MAX_KW_LEN = 5;
+  var MAX_KW_LEN = 4;
   var MIN_KW_LEN = 2;
 
   var KEYWORD_PALETTE = [
@@ -167,7 +167,7 @@
     return true;
   }
 
-  /** 每条留言总结一个不超过 5 字的关键词 */
+  /** 每条留言总结一个完整关键词（小于 5 字，即最多 4 字） */
   function pickKeyword(text) {
     var raw = String(text || '').trim().replace(/\s+/g, ' ');
     if (!raw) return '留言';
@@ -244,7 +244,7 @@
       return candidates[0].word;
     }
 
-    var cn = raw.match(/[\u4e00-\u9fff]{2,5}/);
+    var cn = raw.match(/[\u4e00-\u9fff]{2,4}/);
     if (cn) return trimKeyword(cn[0]);
 
     var fallback = trimKeyword(compact || raw);
@@ -262,14 +262,21 @@
     };
   }
 
+  function sortEntriesByTime(entries) {
+    return (entries || []).slice().sort(function (a, b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+  }
+
   function buildEntryKeywords(entries) {
-    var list = entries || [];
+    var list = sortEntriesByTime(entries);
     var total = list.length;
     return list.map(function (row, index) {
       return {
         word: pickKeyword(row.content),
         style: makeDistinctStyle(index, total),
         row: row,
+        timeIndex: index,
       };
     });
   }
@@ -312,19 +319,26 @@
     if ($cloudEmpty) $cloudEmpty.classList.add('is-hidden');
 
     var total = items.length;
-    var fontSize = Math.max(10, Math.min(15, Math.round(17 - total * 0.12)));
+    var maxFont = 18;
+    var minFont = 10;
 
     items.forEach(function (item, index) {
-      var rank = total > 1 ? index / (total - 1) : 0;
-      var angle = ((index * 137.508) % 360) * (Math.PI / 180);
-      var radius = rank * 40 + (index % 3) * 2;
-      var x = 50 + Math.cos(angle) * radius;
-      var y = 50 + Math.sin(angle) * radius;
-      x = Math.max(10, Math.min(90, x));
-      y = Math.max(14, Math.min(86, y));
+      var timeRank = total > 1 ? index / (total - 1) : 0;
+      var fontSize = Math.round(maxFont - timeRank * (maxFont - minFont));
+
+      var x = 50;
+      var y = 50;
+      if (index > 0) {
+        var angle = ((index * 137.508) % 360) * (Math.PI / 180);
+        var radiusPct = 8 + timeRank * 36;
+        x = 50 + Math.cos(angle) * radiusPct;
+        y = 50 + Math.sin(angle) * radiusPct;
+        x = Math.max(8, Math.min(92, x));
+        y = Math.max(12, Math.min(88, y));
+      }
 
       var span = document.createElement('span');
-      span.className = 'sketch-guestbook-kw';
+      span.className = 'sketch-guestbook-kw' + (index === 0 ? ' is-latest' : '');
       span.textContent = item.word;
       span.style.left = x + '%';
       span.style.top = y + '%';
