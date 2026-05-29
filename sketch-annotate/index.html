@@ -2,7 +2,7 @@
 layout: page
 title: 生活手绘注释图
 description: 上传照片，生成小红书风格手绘标注
-header-img: img/sketch-annotate-header.jpg
+header-img: img/banner_sketch.png
 permalink: /sketch-annotate/
 sketch_guestbook: true
 ---
@@ -204,6 +204,24 @@ sketch_guestbook: true
       <h3 id="sketch-quota-title" class="sketch-quota-title">额度不足</h3>
       <p class="sketch-quota-body">峥峥也是花钱调 api 的，超过一次得加钱昂</p>
       <button type="button" id="sketch-quota-pay-btn" class="sketch-quota-pay-btn">大哥有钱</button>
+    </div>
+    <div id="sketch-quota-state-pay" class="sketch-quota-pay-wrap is-hidden">
+      <img
+        class="sketch-quota-qr"
+        src="{{ '/img/thanksboss.png' | prepend: site.baseurl }}"
+        alt="微信收款码"
+        width="200"
+        height="200"
+        loading="lazy">
+      <p class="sketch-quota-pay-hint">请使用微信扫码付款，完成后再点击下方按钮确认</p>
+      <img
+        class="sketch-quota-qr sketch-quota-qr--bottom"
+        src="{{ '/img/thanksboss.png' | prepend: site.baseurl }}"
+        alt="微信收款码"
+        width="200"
+        height="200"
+        loading="lazy">
+      <button type="button" id="sketch-quota-paid-btn" class="sketch-quota-pay-btn sketch-quota-paid-btn">我已完成扫码付款</button>
     </div>
     <div id="sketch-quota-state-thanks" class="sketch-quota-thanks-wrap is-hidden">
       <p class="sketch-quota-thanks">谢谢大哥 ❤️</p>

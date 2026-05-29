@@ -27,7 +27,7 @@
   var $btnLike, $btnDislike, $likeCount, $dislikeCount;
   var $reactionsList, $reactionsEmpty, $reactionsLoading;
   var $quotaBadge, $quotaHint, $quotaHintCount;
-  var $quotaModal, $quotaStateLimit, $quotaStateThanks, $quotaPayBtn, $quotaBackdrop;
+  var $quotaModal, $quotaStateLimit, $quotaStatePay, $quotaStateThanks, $quotaPayBtn, $quotaPaidBtn, $quotaBackdrop;
 
   function $(id) {
     return document.getElementById(id);
@@ -707,8 +707,25 @@
       quotaThanksTimer = null;
     }
     if ($quotaStateLimit) $quotaStateLimit.classList.remove('is-hidden');
+    if ($quotaStatePay) $quotaStatePay.classList.add('is-hidden');
     if ($quotaStateThanks) $quotaStateThanks.classList.add('is-hidden');
     if ($quotaPayBtn) $quotaPayBtn.disabled = false;
+    if ($quotaPaidBtn) {
+      $quotaPaidBtn.disabled = false;
+      $quotaPaidBtn.textContent = '我已完成扫码付款';
+    }
+  }
+
+  function showQuotaPayState() {
+    if ($quotaStateLimit) $quotaStateLimit.classList.add('is-hidden');
+    if ($quotaStatePay) $quotaStatePay.classList.remove('is-hidden');
+    if ($quotaStateThanks) $quotaStateThanks.classList.add('is-hidden');
+  }
+
+  function showQuotaThanksState() {
+    if ($quotaStateLimit) $quotaStateLimit.classList.add('is-hidden');
+    if ($quotaStatePay) $quotaStatePay.classList.add('is-hidden');
+    if ($quotaStateThanks) $quotaStateThanks.classList.remove('is-hidden');
   }
 
   function showQuotaExhaustedModal() {
@@ -729,9 +746,38 @@
     if ($quotaStateThanks && !$quotaStateThanks.classList.contains('is-hidden')) {
       return;
     }
+    if ($quotaStatePay && !$quotaStatePay.classList.contains('is-hidden')) {
+      resetQuotaModal();
+      return;
+    }
     hideQuotaModal();
   }
 
+  function onQuotaPayClick() {
+    showQuotaPayState();
+  }
+
+  function onQuotaPaidConfirmClick() {
+    if ($quotaPaidBtn) {
+      $quotaPaidBtn.disabled = true;
+      $quotaPaidBtn.textContent = '确认中…';
+    }
+    grantBonusDrawQuota()
+      .then(function () {
+        showQuotaThanksState();
+        quotaThanksTimer = setTimeout(function () {
+          hideQuotaModal();
+        }, 3000);
+      })
+      .catch(function (err) {
+        console.error('grantBonusDrawQuota', err);
+        if ($quotaPaidBtn) {
+          $quotaPaidBtn.disabled = false;
+          $quotaPaidBtn.textContent = '我已完成扫码付款';
+        }
+        alert('额度增加失败：' + (err.message || '请稍后重试'));
+      });
+  }
   function grantBonusDrawQuota() {
     if (!supabase || !currentSession) {
       return Promise.reject(new Error('请先登录'));
@@ -753,23 +799,6 @@
       renderQuotaUI();
       return currentQuota;
     });
-  }
-
-  function onQuotaPayClick() {
-    if ($quotaPayBtn) $quotaPayBtn.disabled = true;
-    grantBonusDrawQuota()
-      .then(function () {
-        if ($quotaStateLimit) $quotaStateLimit.classList.add('is-hidden');
-        if ($quotaStateThanks) $quotaStateThanks.classList.remove('is-hidden');
-        quotaThanksTimer = setTimeout(function () {
-          hideQuotaModal();
-        }, 3000);
-      })
-      .catch(function (err) {
-        console.error('grantBonusDrawQuota', err);
-        if ($quotaPayBtn) $quotaPayBtn.disabled = false;
-        alert('额度增加失败：' + (err.message || '请稍后重试'));
-      });
   }
 
   function consumeDrawQuotaOnSuccess() {
@@ -977,12 +1006,17 @@
     $quotaHintCount = $('sketch-quota-hint-count');
     $quotaModal = $('sketch-quota-modal');
     $quotaStateLimit = $('sketch-quota-state-limit');
+    $quotaStatePay = $('sketch-quota-state-pay');
     $quotaStateThanks = $('sketch-quota-state-thanks');
     $quotaPayBtn = $('sketch-quota-pay-btn');
+    $quotaPaidBtn = $('sketch-quota-paid-btn');
     $quotaBackdrop = $quotaModal ? $quotaModal.querySelector('.sketch-quota-backdrop') : null;
 
     if ($quotaPayBtn) {
       $quotaPayBtn.addEventListener('click', onQuotaPayClick);
+    }
+    if ($quotaPaidBtn) {
+      $quotaPaidBtn.addEventListener('click', onQuotaPaidConfirmClick);
     }
     if ($quotaBackdrop) {
       $quotaBackdrop.addEventListener('click', onQuotaBackdropClick);
