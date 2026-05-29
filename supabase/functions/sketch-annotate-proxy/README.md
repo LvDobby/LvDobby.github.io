@@ -46,9 +46,11 @@ sketch_api_url: "https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-an
 
 ## 国内登录 / 统计（Supabase REST 代理）
 
-无梯子时浏览器直连 `*.supabase.co/rest/v1` 或 `/auth/v1` 可能超时或被干扰。  
-前端已自动把 Supabase 客户端的 REST/Auth 请求改走同一 Edge Function：
+无梯子时浏览器直连 `*.supabase.co/rest/v1` 可能超时或被干扰。  
+前端已自动把 Supabase **REST** 请求改走同一 Edge Function：
 
-`?path=/supabase/rest/v1/...` 或 `?path=/supabase/auth/v1/...`
+`?path=/supabase/rest/v1/...`
+
+**Auth / OAuth（`/auth/v1/*`）必须直连**，不能走代理，否则 OAuth 302 重定向会被吞掉导致 GitHub 登录卡住。
 
 与生图 API 共用 `sketch_api_url`，无需额外配置。部署新版本 Edge Function 后即可生效。

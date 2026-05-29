@@ -106,12 +106,17 @@ function forwardRequestHeaders(req: Request): Headers {
 
 function proxyResponse(upstream: Response, cors: Record<string, string>): Response {
   const respHeaders = new Headers(cors);
-  const ct = upstream.headers.get("Content-Type");
-  if (ct) respHeaders.set("Content-Type", ct);
-  const cache = upstream.headers.get("Cache-Control");
-  if (cache) respHeaders.set("Cache-Control", cache);
-  const contentRange = upstream.headers.get("Content-Range");
-  if (contentRange) respHeaders.set("Content-Range", contentRange);
+  const passThrough = [
+    "Content-Type",
+    "Cache-Control",
+    "Content-Range",
+    "Location",
+    "Set-Cookie",
+  ];
+  for (const name of passThrough) {
+    const value = upstream.headers.get(name);
+    if (value) respHeaders.set(name, value);
+  }
 
   return new Response(upstream.body, {
     status: upstream.status,
@@ -133,6 +138,9 @@ Deno.serve(async (req: Request) => {
   const headers = forwardRequestHeaders(req);
 
   const init: RequestInit = { method: req.method, headers };
+  if (pathname.startsWith("/supabase/auth/")) {
+    init.redirect = "manual";
+  }
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = req.body;
   }
