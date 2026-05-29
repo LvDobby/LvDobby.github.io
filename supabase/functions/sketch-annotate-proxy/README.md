@@ -19,10 +19,14 @@ supabase functions deploy sketch-annotate-proxy \
 4. 验证：
 
 ```bash
-curl -sS "https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-annotate-proxy/api/health"
+curl -sS "https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-annotate-proxy?path=%2Fapi%2Fhealth"
+curl -sS -X POST "https://ejgemmhyeeuiudhqlioc.supabase.co/functions/v1/sketch-annotate-proxy?path=%2Fapi%2Fannotate" \
+  -F "image=@img/aboutme01.jpg" -F "model=bytedance-seed/seedream-4.5"
 ```
 
-应返回 `{"ok":true,...}`。
+应返回 `{"ok":true,...}` 与生图 JSON。
+
+> Supabase 不会把 `/api/annotate` 子路径传给函数，前端通过 `?path=/api/annotate` 指定 Worker 路由。
 
 ## 可选密钥
 

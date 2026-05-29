@@ -16,8 +16,6 @@ const ALLOWED_ORIGINS = (
   .map((s) => s.trim())
   .filter(Boolean);
 
-const FUNCTION_PREFIX = "/functions/v1/sketch-annotate-proxy";
-
 function corsHeaders(origin: string | null): Record<string, string> {
   let allowOrigin = ALLOWED_ORIGINS[0] ?? "*";
   if (origin) {
@@ -36,14 +34,39 @@ function corsHeaders(origin: string | null): Record<string, string> {
 }
 
 function workerPathFromRequest(url: URL): string {
-  let path = url.pathname;
-  if (path.startsWith(FUNCTION_PREFIX)) {
-    path = path.slice(FUNCTION_PREFIX.length) || "/api/health";
+  const fromQuery = url.searchParams.get("path");
+  if (fromQuery) {
+    let path = fromQuery.trim();
+    if (!path.startsWith("/")) path = `/${path}`;
+    if (path.startsWith("/api/")) return path;
   }
-  if (!path.startsWith("/api/")) {
-    path = "/api/health";
+
+  const route = "/functions/v1/sketch-annotate-proxy";
+  let suffix = "";
+
+  if (url.pathname.startsWith(route)) {
+    suffix = url.pathname.slice(route.length);
   }
+
+  if (!suffix) {
+    const pathOnly = url.href.split("?")[0];
+    const idx = pathOnly.indexOf(route);
+    if (idx !== -1) {
+      suffix = pathOnly.slice(idx + route.length);
+    }
+  }
+
+  let path = (suffix || "/api/health").trim();
+  if (!path.startsWith("/")) path = `/${path}`;
+  if (!path.startsWith("/api/")) path = "/api/health";
   return path;
+}
+
+function workerSearchFromRequest(url: URL): string {
+  const params = new URLSearchParams(url.searchParams);
+  params.delete("path");
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 Deno.serve(async (req: Request) => {
@@ -56,7 +79,7 @@ Deno.serve(async (req: Request) => {
 
   const incoming = new URL(req.url);
   const path = workerPathFromRequest(incoming);
-  const target = `${WORKER_BASE.replace(/\/$/, "")}${path}${incoming.search}`;
+  const target = `${WORKER_BASE.replace(/\/$/, "")}${path}${workerSearchFromRequest(incoming)}`;
 
   const headers = new Headers();
   const auth = req.headers.get("Authorization");

@@ -134,18 +134,53 @@
   }
 
   /** 将 Worker 绝对地址改走当前 API 根（Supabase 代理），避免浏览器直连 workers.dev 证书错误 */
+  function isSupabaseProxyBase(apiBase) {
+    return /supabase\.co\/functions\/v1\/sketch-annotate-proxy/i.test(apiBase || '');
+  }
+
+  function buildApiUrl(apiBase, apiPath, extraQuery) {
+    apiPath = apiPath || '/api/health';
+    if (!isSupabaseProxyBase(apiBase)) {
+      if (extraQuery) {
+        var q = String(extraQuery).replace(/^\?/, '');
+        return apiBase + apiPath + (q ? '?' + q : '');
+      }
+      return apiBase + apiPath;
+    }
+    var parts = ['path=' + encodeURIComponent(apiPath)];
+    if (extraQuery) {
+      var extra = String(extraQuery).replace(/^\?/, '');
+      if (extra) parts.push(extra);
+    }
+    return apiBase + '?' + parts.join('&');
+  }
+
+  function resolveApiRequestUrl(apiBase, fetchPath) {
+    if (/^https?:\/\//i.test(fetchPath)) {
+      return normalizeApiAssetUrl(fetchPath, apiBase);
+    }
+    var path = fetchPath;
+    var search = '';
+    var qIdx = fetchPath.indexOf('?');
+    if (qIdx !== -1) {
+      path = fetchPath.slice(0, qIdx);
+      search = fetchPath.slice(qIdx + 1);
+    }
+    return buildApiUrl(apiBase, path, search);
+  }
+
   function normalizeApiAssetUrl(url, apiBase) {
     if (!url || !apiBase) return url;
     var value = String(url).trim();
     if (!value) return value;
     if (value.indexOf('/api/result') === 0 || value.indexOf('/api/proxy-image') === 0) {
-      return apiBase + value;
+      return resolveApiRequestUrl(apiBase, value);
     }
     if (/^https?:\/\//i.test(value) && /workers\.dev/i.test(value)) {
       try {
         var parsed = new URL(value);
         if (parsed.pathname.indexOf('/api/') === 0) {
-          return apiBase + parsed.pathname + parsed.search;
+          return buildApiUrl(apiBase, parsed.pathname, parsed.search.replace(/^\?/, ''));
         }
       } catch (e) {
         /* ignore */
@@ -218,7 +253,7 @@
     var attempts = 0;
     function tick() {
       attempts += 1;
-      return fetch(apiBase + '/api/status?id=' + encodeURIComponent(jobId), { headers: headers })
+      return fetch(buildApiUrl(apiBase, '/api/status', 'id=' + encodeURIComponent(jobId)), { headers: headers })
         .then(function (res) {
           return res.json().then(function (data) {
             if (!res.ok) throw new Error(data.error || '查询任务失败');
@@ -264,7 +299,7 @@
   }
 
   function checkApiReachable(apiBase) {
-    return fetchWithRetry(apiBase + '/api/health', { method: 'GET', headers: getAuthHeaders() }, 1)
+    return fetchWithRetry(buildApiUrl(apiBase, '/api/health'), { method: 'GET', headers: getAuthHeaders() }, 1)
       .then(function (res) {
         if (!res.ok) {
           return res.text().then(function (text) {
@@ -277,8 +312,7 @@
 
   function fetchGeneratedBlob(fetchPath, apiBase, headers) {
     var authHeaders = headers || getAuthHeaders();
-    var fullUrl =
-      /^https?:\/\//i.test(fetchPath) ? fetchPath : apiBase + fetchPath;
+    var fullUrl = resolveApiRequestUrl(apiBase, fetchPath);
     return fetchWithRetry(fullUrl, { headers: authHeaders }, 1).then(function (res) {
       if (!res.ok) {
         return res
@@ -309,7 +343,7 @@
     if (data.imageFetchUrl) {
       var relativeOrAbsolute = /^https?:\/\//i.test(data.imageFetchUrl)
         ? normalizeApiAssetUrl(data.imageFetchUrl, apiBase)
-        : apiBase + data.imageFetchUrl;
+        : resolveApiRequestUrl(apiBase, data.imageFetchUrl);
       if (fetchCandidates.indexOf(relativeOrAbsolute) === -1) {
         fetchCandidates.push(relativeOrAbsolute);
       }
@@ -336,10 +370,11 @@
     }
 
     function resolveRemoteImage(remoteUrl) {
-      var proxy =
-        apiBase +
-        '/api/proxy-image?url=' +
-        encodeURIComponent(remoteUrl);
+      var proxy = buildApiUrl(
+        apiBase,
+        '/api/proxy-image',
+        'url=' + encodeURIComponent(remoteUrl),
+      );
       return fetch(proxy, { headers: authHeaders })
         .then(function (res) {
           if (!res.ok) {
@@ -380,7 +415,9 @@
     if (!imageUrl) {
       return Promise.reject(new Error('云端未返回图片数据'));
     }
-    var fetchUrl = data.proxyUrl ? apiBase + data.proxyUrl : imageUrl;
+    var fetchUrl = data.proxyUrl
+      ? resolveApiRequestUrl(apiBase, data.proxyUrl)
+      : imageUrl;
     if (!/^https?:\/\//i.test(fetchUrl) && fetchUrl.indexOf('/api/proxy-image') === -1) {
       return Promise.reject(new Error('云端返回的图片地址无效'));
     }
@@ -458,7 +495,7 @@
         setStatus(modelLabel + ' 生成中…已等待 ' + secs + ' 秒，请勿关闭页面', true);
       }, GENERATE_WAIT_HINT_MS);
 
-      return fetchWithRetry(apiBase + '/api/annotate', {
+      return fetchWithRetry(buildApiUrl(apiBase, '/api/annotate'), {
         method: 'POST',
         headers: headers,
         body: form,
